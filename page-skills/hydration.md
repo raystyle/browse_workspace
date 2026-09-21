@@ -31,6 +31,6 @@ return await pageEval(`(() => {
 ## 陷阱
 
 - 水合失败（JS 报错）的页：DOM 永远不活，jsErrors() 看异常，别死等
-- next App Router 与 Pages Router 标记不同（`__next_f` vs `#__NEXT_DATA__`）：探测只认 App Router 形，Pages Router 页可能不点名，交互失灵时自己查 `#__NEXT_DATA__`
+- next App Router 与 Pages Router 标记不同（`__next_f` 流数据 vs 全局 `__NEXT_DATA__`）：探测两者都认，只点名 hydration 不区分路由形，要区分自己查全局
 - astro 多岛渐进水合：视口外的岛未水合是常态，滚到可见再等
 - qwik 的懒执行：交互时才下载处理器，首次点击比常站慢，waitForResponse 里能看到处理器请求
