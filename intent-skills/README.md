@@ -25,7 +25,7 @@ rg -il "上传|下载|对话框" ~/.browse-rs/workspace/intent-skills/
 | cookies.md | cookie 与存储族（读写删、storageState 往返、cloneCookies 热迁） |
 | connection.md | 连接与附着（session.connect/use、附着优先策略、人机共存） |
 
-前代 bh interaction-skills 17 篇迁移完毕（4 篇页面特征类分流进 page-skills，3 篇直迁，10 篇本批新写）；本地 bh 安装已整体退役清理，源头唯一在册 GitHub raystyle/browser-harness@5994413，回溯考据再克隆。
+前代 bh interaction-skills 17 篇迁移完毕（4 篇页面特征类分流进 page-skills，11 篇本批新写，uploads/downloads 两篇并入 file-download.md；更早直迁的 navigation-race/file-download/mouse-input 三篇本就不在 17 篇清单内）；本地 bh 安装已整体退役清理，源头唯一在册 GitHub raystyle/browser-harness@5994413，回溯考据再克隆。
 
 ## 写作规约
 
