@@ -17,7 +17,7 @@ await fillRef("e7", "user@example.com")
 
 ## 判定 iframe 是否同源
 
-探测回执只报 iframe 与 iframe-cross-origin 两档；同源判定看 iframe src 与当前页 hostname（显式端口不影响同源判定）。页内自查：
+探测回执只报 iframe 与 iframe-cross-origin 两档；本探测的同源判定比对 iframe src 与当前页 hostname、不吃显式端口（与 Web origin 语义不同，端口不同但主机相同会归同源档，跨源配方按需自查）。页内自查：
 
 ```
 return await pageEval(`(() => {
