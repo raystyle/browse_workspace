@@ -44,11 +44,38 @@ browse fetch https://medium.com/feed/@karpathy    # 或 /feed/<publication>
 - 最多 10 条最近文章；`content:encoded` 是全文 HTML；无 clap 数与付费状态；无翻页
 - link 带 `?source=rss-...` 追踪参，剥 `?` 后即净 URL
 
+## 搜索（无 API，浏览器通道）
+
+搜索页 HTTP 通道不可用：`browse fetch` 回 403 且正文只有导航壳，结果客户端渲染。
+
+```
+await goto("https://medium.com/search?q=<q>", {waitIdle: true})
+await session.waitJs("document.querySelectorAll('a[href] h2, a[href] h3').length > 3", 10)
+```
+
+结果抽取（`a[href]` 内 h2/h3；href 过滤用文章 id 尾部 12 位 hex，覆盖 `@user/` 与 `<publication>/` 两种 URL 形；剥 `?source=` 追踪参，按 href 去重）：
+
+```
+return await pageEval(`(() => {
+  const seen = new Set(), out = []
+  for (const a of document.querySelectorAll('a[href]')) {
+    const h = a.querySelector('h2, h3'); if (!h) continue
+    const href = a.href.split('?')[0]
+    if (!/-[a-f0-9]{12}$/.test(href) || seen.has(href)) continue
+    seen.add(href); out.push({title: h.textContent.trim(), href})
+  }
+  return JSON.stringify(out)
+})()`)
+```
+
+- 分页是「Show more」按钮逐批加载（非滚动流）：`findRefs("Show more")` 按 role=button 挑 ref 后 `clickRef`，`waitJs` 等条目数增长；每批挂载后旧 ref 失效，逐批重新 findRefs
+- 结果含会员锁文：用 `?format=json` 的 `isSubscriptionLocked` 区分（locked 文的 body 也在 API 回执里，截断只发生在浏览器渲染面）
+
 ## 翻页与坑
 
 - profile / publication 的 `?format=json` 回 `payload.paging.next`（{limit, to, page}），拼回同 URL 即下一页
 - `totalClapCount`（一人最多 50 拍累计）不等于 `recommends`（独立拍者数）；GraphQL 的 `clapCount` 等于前者
 - 子域同文：`medium.com/@user/<slug>` 与 `user.medium.com/<slug>` 同 id 同数据，format=json 两边都行
 - towardsdatascience.com 已迁自有 WordPress 非 Medium 面；Medium 侧归档在 `medium.com/towards-data-science`
-- 无公开搜索 API：关键词检索要么浏览器要么拉 feed 本地滤
+- 无公开搜索 API：关键词检索走「搜索」节的浏览器通道，或拉 feed 本地滤
 - 时间戳全是 unix 毫秒
