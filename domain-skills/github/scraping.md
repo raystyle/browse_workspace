@@ -36,11 +36,11 @@ return await goto("https://github.com/trending", {waitIdle: true})
 ## 限速与认证
 
 - 未认证 60 次/时/源 IP；带 token 5000 次/时。token 放环境变量别写进片段：
-  认证头经引擎腿不方便时用 `routeMock` 之外的正道（fetch 面暂无 header 通道，认证抓取走
+  认证头经引擎通道不方便时用 `routeMock` 之外的正道（fetch 面暂无 header 通道，认证抓取走
   pageEval 的 fetch 或 curl 等门外工具）
 - 触到限速回 403 带 `X-RateLimit-Remaining: 0`：等窗口重置（看 `X-RateLimit-Reset`），别重试风暴
 
-## 浏览器腿的坑（trending / 登录态面）
+## 浏览器通道的坑（trending / 登录态面）
 
 - trending 每日缓存变动：同日多次 goto 结果一致属正常，不是你的选择器错了
 - 未登录 trending 可见；登录后页面结构略有差异，snapshot 后按 role/name 挑，别写死 CSS 选择器

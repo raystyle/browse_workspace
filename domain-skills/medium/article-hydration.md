@@ -1,4 +1,4 @@
-# medium：浏览器腿正文抽取（DOM 兜底）
+# medium：正文抽取（浏览器通道，DOM 兜底）
 
 只在 API 面被墙（Cloudflare 挑战词）、会员文（API 标 locked 但登录浏览器可渲染全文）、JS 付费墙弹层时走浏览器；免费文能用 API 就用 scraping.md。
 
@@ -13,7 +13,7 @@
 
 readyState=complete 不够：作者卡与 clap 挂件在其后继续水合，骨架期 `<article>` 外框在而首几段还是骨架 div。形态：`goto(url, {waitIdle: true})` 加 `waitJs("document.querySelector('article p') && document.querySelector('article p').innerText.length > 100", 10)` 等首段落实。`<article>` 在而全文 <500 字符 = 付费墙截了：查登录态与付费状态后按 scraping.md API 面核对。
 
-## 抽取器（pageEval 一次求值，前代 bh 实测 walker 迁移）
+## 抽取器（pageEval 一次求值）
 
 ```js
 pageEval(`(()=>{

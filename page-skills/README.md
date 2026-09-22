@@ -13,7 +13,7 @@
 | iframe-cross-origin | 跨源 iframe 判定命中 | CONFIRMED |
 | lazy-scroll | 页高 >= 8 倍视口加滚动容器窗口特征 | PLAUSIBLE |
 | bot-shield | cf-chl 类 DOM（CONFIRMED）或 CF cookie（PLAUSIBLE） | 双档 |
-| login-wall | 可见 password 框（登录骨架腿未实现，误点名常见于登录框常驻页头） | PLAUSIBLE |
+| login-wall | 可见 password 框（登录骨架信号未实现，误点名常见于登录框常驻页头） | PLAUSIBLE |
 | captcha | recaptcha/hcaptcha/turnstile 特征 | CONFIRMED |
 | service-worker | navigator.serviceWorker.controller | CONFIRMED |
 
