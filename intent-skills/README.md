@@ -6,12 +6,12 @@
 rg -il "上传|下载|对话框" ~/.browse-rs/workspace/intent-skills/
 ```
 
-## 在册（17 篇全迁，2026-09-21 收口）
+## 在册
 
 | 文件 | 何时读 |
 | --- | --- |
-| navigation-race.md | navigate 后取内容/截图/等事件的竞速与等待判官选择 |
-| file-download.md | 文件上传与下载的通道与信号（uploads/downloads 两源并入） |
+| navigation-race.md | navigate 后取内容/截图/等事件的竞速与等待策略选择 |
+| file-download.md | 文件上传与下载的通道与信号 |
 | mouse-input.md | 鼠标/输入原语的语义坑（滚轮首发、后台 tab、role 挑选） |
 | dialogs.md | JS 对话框三件（dialogStatus/dialogAccept/dialogDismiss）与打桩 |
 | dropdowns.md | 下拉框 select 与自定义组件两型（selectOption/combobox 键盘提交） |
@@ -24,8 +24,6 @@ rg -il "上传|下载|对话框" ~/.browse-rs/workspace/intent-skills/
 | viewport.md | 视口与 UA 仿真（emulate/emulateMedia、DPR 换算、断点时机） |
 | cookies.md | cookie 与存储族（读写删、storageState 往返、cloneCookies 热迁） |
 | connection.md | 连接与附着（session.connect/use、附着优先策略、人机共存） |
-
-前代 bh interaction-skills 17 篇迁移完毕（4 篇页面特征类分流进 page-skills，11 篇本批新写，uploads/downloads 两篇并入 file-download.md；更早直迁的 navigation-race/file-download/mouse-input 三篇本就不在 17 篇清单内）；本地 bh 安装已整体退役清理，源头唯一在册 GitHub raystyle/browser-harness@5994413，回溯考据再克隆。
 
 ## 写作规约
 

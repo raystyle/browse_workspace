@@ -1,6 +1,6 @@
 # x：公开 status 的 Article 卡片与规范源恢复
 
-x.com 公开帖（`x.com/<handle>/status/<id>`）带 X Article 卡片时，卡内正文路由对匿名浏览器跳登录，别据此判帖子私有。前代 bh 实测口径，用时按需复验。
+x.com 公开帖（`x.com/<handle>/status/<id>`）带 X Article 卡片时，卡内正文路由对匿名浏览器跳登录，别据此判帖子私有。
 
 ## 公开 status 的锚点清点
 

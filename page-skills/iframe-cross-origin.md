@@ -17,7 +17,7 @@ await clickRef("e23")
 
 ## 子 session 机制（排查穿透失效时看）
 
-子 session 靠「发现 + 显式 attach」：browse 扫 Target.getTargets 逐个 attachToTarget(flatten)，OOPIF 销毁按 Target.detachedFromTarget 摘账。本机 Chrome 152 实测 Target.setAutoAttach 无论挂浏览器级还是页面级、带不带 filter:[{type:"iframe"}]，都不产生 iframe 型 attachedToTarget，所以 OOPIF 不能靠 auto-attach，必须显式 attach（browse 已内置，这条是排查背景知识）。
+子 session 靠「发现 + 显式 attach」：browse 扫 Target.getTargets 逐个 attachToTarget(flatten)，OOPIF 销毁按 Target.detachedFromTarget 摘账。Chrome 152 的 Target.setAutoAttach（浏览器级或页面级、带或不带 filter:[{type:"iframe"}]）不产生 iframe 型 attachedToTarget，所以 OOPIF 不能靠 auto-attach，必须显式 attach（browse 已内置，这条是排查背景知识）。
 
 ## 陷阱
 

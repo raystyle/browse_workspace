@@ -1,10 +1,10 @@
-# medium：只读数据面（API 优先，零浏览器）
+# medium：只读数据面（API 优先）
 
-medium.com 只读任务恒先走 HTTP 通道（`browse fetch` / RSS / GraphQL），浏览器只留给登录态动作（clap、发文、会员文渲染）。2026-09-21 实测基线。
+medium.com 只读任务恒先走 HTTP 通道（`browse fetch` / RSS / GraphQL），浏览器只留给登录态动作（clap、发文、会员文渲染）。
 
 ## 通道选择
 
-| 目标 | 通道 | 前代实测时延 |
+| 目标 | 通道 | 参考时延 |
 | --- | --- | --- |
 | 文章元数据加全文 | `?format=json` | ~400ms |
 | 指标单项（claps 等） | GraphQL `post(id:)` | ~275ms |
@@ -20,7 +20,7 @@ medium.com 只读任务恒先走 HTTP 通道（`browse fetch` / RSS / GraphQL）
 browse fetch 'https://medium.com/@karpathy/software-2-0-a64152b37c35?format=json'
 ```
 
-- 2026-09-21 实测：回执 **httpStatus 403 但正文仍是完整 JSON**（前代 bh 时代是 200）：403 别当失败，剥 XSSI 前缀 `])}while(1);</x>` 再解析（宿主侧 slice 到首个 `{`，或 pageEval 正则）
+- 回执 httpStatus 403 但正文仍是完整 JSON：403 不当失败，剥 XSSI 前缀 `])}while(1);</x>` 再解析（宿主侧 slice 到首个 `{`，或 pageEval 正则）
 - 关键字段：`payload.value`（title / id / creatorId / uniqueSlug / canonicalUrl / firstPublishedAt 毫秒 / isSubscriptionLocked / visibility 0=公开 2=锁）；`payload.value.virtuals`（totalClapCount 总拍数 / recommends 独立拍者 / readingTime 分钟 / wordCount / tags）；`payload.references.User[creatorId]` 作者名与 handle；`references.SocialStats[creatorId]` 的 usersFollowedByCount
 - 正文：`value.content.bodyModel.paragraphs`（type 1=正文 3=标题 4=图）；付费文 body 同样返回，截断只发生在浏览器渲染面
 - 不适用的面：search 页（403/坏 JSON）、`/_/api/users/<id>/profile/stream`（403）
@@ -43,7 +43,6 @@ browse fetch https://medium.com/feed/@karpathy    # 或 /feed/<publication>
 
 - 最多 10 条最近文章；`content:encoded` 是全文 HTML；无 clap 数与付费状态；无翻页
 - link 带 `?source=rss-...` 追踪参，剥 `?` 后即净 URL
-- 2026-09-21 实测 200 正常（@karpathy 97KB）
 
 ## 翻页与坑
 

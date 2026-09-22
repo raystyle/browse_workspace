@@ -37,4 +37,4 @@ browse workspace list       # 列全部段与 slug
 
 ## 与 browse 的版本关系
 
-本仓是知识面，不锁 browse 版本；配方引用的命令面以 `browse --llms` 为准。资产种子源自前代 browser-harness（94 站 domain-skills 与 17 篇 interaction-skills）：interaction 17 篇已全迁（2026-09-21 收口）；domain-skills 精选迁移进行中（x/medium 两站自 bh 迁入，google 站无 bh 源新写并实测验基，2026-09-21）；前代本地安装已退役清理，源头唯一在册 GitHub raystyle/browser-harness@5994413。
+本仓是知识面，不锁 browse 版本；配方引用的命令面以 `browse --llms` 为准。

@@ -6,5 +6,5 @@
 - 写删：`cookieSet(name, value, opts)`（缺 domain 走当前页 URL，回 success 布尔）、`cookieDelete(name, domain?)`（CDP 无单数形，同域同名多 path 一起清）、`cookiesClear()`（清整浏览器全部 cookie，破坏性动作）
 - Web 存储：localGet/localSet/localDelete/localClear 与 sessionGet/sessionSet/sessionDelete/sessionClear（当前域；localClear 不动 sessionStorage）；写入即回读验证
 - 整包往返：`exportStorageState()`（cookies 全量加当前页 origin 的 localStorage；多 origin 逐个切 tab 再导）/ `importStorageState(state 或 path)`
-- 从用户 chrome 热迁到当前集成引擎：`cloneCookies(domains)`（源只读零写回铁律；域后缀匹配；探测面只认 9222 与默认 profile 的调试口，其他端口的源先 `--connect` 连上 exportStorageState 导出、回自己引擎 importStorageState 灌回）；up 的 --cookies 域 csv 是同一道的 CLI 面
+- 从用户 chrome 热迁到当前集成引擎：`cloneCookies(domains)`（源只读零写回；域后缀匹配；探测面只认 9222 与默认 profile 的调试口，其他端口的源先 `--connect` 连上 exportStorageState 导出、回自己引擎 importStorageState 灌回）；up 的 --cookies 域 csv 是同一道的 CLI 面
 - 陷阱：Network.setCookie 域不匹配时静默假成功（仍回 success:true 实未写入）：cookieSet 后回读验证；expires 是秒不是毫秒；清 cookie 不清 localStorage，完整登出要两清

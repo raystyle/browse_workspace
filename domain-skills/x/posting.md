@@ -15,7 +15,7 @@
 - 发送：`findRefs("Post")` 按 role=button 挑；inline 编辑器与弹层是不同 testid（见下表）
 - 确认：成功后页面底部出「Your post was sent.」toast，`screenshot` 留证
 
-## 稳定选择器（前代 bh 实测，按需复验）
+## 稳定选择器
 
 | 元素 | data-testid |
 | --- | --- |

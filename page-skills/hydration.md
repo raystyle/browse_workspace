@@ -21,7 +21,7 @@ return await pageEval(`(() => {
 })()`)
 ```
 
-实战更稳的判官是行为面：等交互目标真的响应。`waitJs` 等水合敏感标记（如 next 的 hydration 完成常伴随应用容器 class 变化），或直接 clickRef 后用 waitForResponse 确认应用层请求发出。
+更稳的完成判定是行为面：等交互目标真的响应。`waitJs` 等水合敏感标记（如 next 的 hydration 完成常伴随应用容器 class 变化），或直接 clickRef 后用 waitForResponse 确认应用层请求发出。
 
 ## 抓内容与做交互的分野
 
