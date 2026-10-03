@@ -17,7 +17,7 @@ browse 0.21.0 起本仓是多根加载的缺省根：`browse workspace add <路�
 | --- | --- | --- |
 | `domain-skills/<段>/<主题>.md` | 一站一目录，一文件一主题（选择器、结构、坑） | goto 按 URL 域名段点名 |
 | `page-skills/<slug>.md` | 一文件一机制配方（10 slug 首发，清单见该目录 README） | goto 按页面特征点名 |
-| `page-skills/scripts/probe.rn` | 页面特征判据脚本（browse 隐式加载，goto/detect 触发） | 多根序首命中覆写内置缺省 |
+| `page-skills/scripts/probe.rn` | 页面特征判据脚本（browse 隐式加载，goto/detect 触发） | 多根序首命中覆写内置缺省；主世界 cdp::js 求值、browse 侧 8 秒界、超时/坏脚本静默降级零键；rn 脚本**不走 Jinja 模板道**（无 --vars，`{{ }}` 是字面） |
 
 前两目录即自定义仓契约：`browse workspace add` 登记的仓只需同构
 `domain-skills/<段>/` 与 `page-skills/<slug>.md`，goto/fetch 点名与
