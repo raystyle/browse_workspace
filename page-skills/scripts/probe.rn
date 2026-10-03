@@ -9,7 +9,7 @@
 // 超时/编译错/环境错静默降级零键（首败 daemon.log 留痕一次）。
 // 判据增改直接改本文件（git push 回推），免 browse 发版。
 pub async fn main() {
-    let v = cdp::js(r#"return (() => {
+    let v = cdp::js(r##"return (() => {
   const out = { framework: null, slugs: [] };
   const add = (s, c) => { out.slugs.push({ slug: s, confidence: c }); };
   try {
@@ -125,6 +125,6 @@ pub async fn main() {
     if (fname) out.framework = { name: fname, version: fver };
   } catch (e) { /* 整体降级：空骨架零键附加 */ }
   return out;
-})()"#, #{}).await?;
+})()"##, #{}).await?;
     Ok(v)
 }
