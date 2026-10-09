@@ -1,0 +1,20 @@
+// gm-bridge 宿主编排:经桥取跨域资源演示(页源 8871,目标 8872 跨域;
+// 页面 fetch 会被 CORS 拦,桥走 GM 通道带引擎会话)。
+// 用法:browse rune page-skills/gm-bridge/mech.rn [--timeout 60]
+pub async fn main() {
+    let v = cdp::js(r#"return (function(){
+  return new Promise(function(res, rej){
+    var id = 'gmb-' + Date.now();
+    var to = setTimeout(function(){ rej(new Error('bridge-timeout')); }, 15000);
+    document.addEventListener('browse-gm-res', function h(e){
+      var d = e.detail || {};
+      if (d.id !== id) return;
+      clearTimeout(to);
+      document.removeEventListener('browse-gm-res', h);
+      res({ ok: d.ok, status: d.status, body: ('' + (d.body || '')).slice(0, 200) });
+    });
+    document.dispatchEvent(new CustomEvent('browse-gm-req', { detail: { id: id, kind: 'fetch', url: 'http://127.0.0.1:8872/data.json' } }));
+  });
+})()"#, #{}).await?;
+    Ok(v)
+}

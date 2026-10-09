@@ -15,9 +15,10 @@ const slugs = readdirSync(PK, { withFileTypes: true })
   .filter((e) => e.isDirectory())
   .map((e) => e.name)
   .sort();
-t.eq('九对在册', slugs, [
-  'antibot-vendor', 'challenge-stop', 'fingerprint-watch', 'link-table',
-  'next-page', 'policy-surface', 'response-tap', 'scroll-until-end', 'spa-route',
+t.eq('十一对在册', slugs, [
+  'antibot-vendor', 'challenge-stop', 'fingerprint-watch', 'gm-bridge',
+  'human-gate', 'link-table', 'next-page', 'policy-surface', 'response-tap',
+  'scroll-until-end', 'spa-route',
 ]);
 for (const slug of slugs) {
   const dir = join(PK, slug);
@@ -82,6 +83,10 @@ const TABLE: ReadonlyArray<readonly [string, Record<string, unknown>, DetectHitT
   ['spa-route', { framework: null }, null],
   ['spa-route', {}, null],
   // 恒 null 三对:不许开始点名
+  // 恒 null 五对:服务/导出型不许开始点名
+  ...(['gm-bridge', 'human-gate'] as const).map(
+    (slug) => [slug, {}, null] as const,
+  ),
   ...(['response-tap', 'link-table', 'fingerprint-watch'] as const).flatMap(
     (slug) => [
       [slug, {}, null] as const,

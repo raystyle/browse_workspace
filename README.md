@@ -70,12 +70,25 @@ daemon 用冻结 slug × 动作的模板(27 条闭集)生成 cta 句子——页
 - 多对共存：包 `fetch`/`history` 先看 Symbol（`_prelude.js` 的单包约定），
   后装的只登记过滤器。
 
-## 首批九对（爬虫五 + 安全四）
+## 对册（十一对:爬虫五 + 安全四 + 服务二）
 
 爬虫：response-tap（钩响应采集）、scroll-until-end（滚到没有更多）、
 next-page（翻页）、spa-route（SPA 路由监听）、link-table（链接清单导出）。
 安全：challenge-stop（挑战页识别+条件停）、antibot-vendor（反爬产品识别）、
 fingerprint-watch（指纹 API 调用观察）、policy-surface（策略与敏感面侦察）。
+服务：gm-bridge（GM 特权跨世界桥:CustomEvent RPC 取跨域/KV）、
+human-gate（人机同环:通知+菜单闸,零轮询放行）。
+
+## 六向增强谱系(油猴之于 rn,2026-10-10)
+
+①武装-收割(等待搬进页面事件循环,消灭 attach 自扰;human-gate 的
+Promise 等待是样板) ②GM 服务桥(gm-bridge;**引擎注:clean-chrome
+GM_xhr 实测受 CORS 约束**——目标须配合 ACAO 或同源,与真 Tampermonkey
+的免 CORS 不同,跨域免 CORS 待引擎面) ③帧群(@match 每帧自动注入,
+跨源 iframe 零编排) ④长时程缓冲(采集比编排活得久,response-tap 形)
+⑤人机同环(human-gate) ⑥真实时序(页内 dispatchEvent 序列)。
+三世界实测:油猴/rune(browse-rune)/主世界互不通 JS 对象,**DOM 属性
+与 CustomEvent 是唯一跨世界道**。
 
 ## 安装常驻脚本（P0，Userscript.* 域落地前）
 
