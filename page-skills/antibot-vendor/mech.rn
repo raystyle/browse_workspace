@@ -1,0 +1,23 @@
+// antibot-vendor 宿主编排:goto 后读一条侦察报告进返回值
+// 用法:browse rune page-skills/antibot-vendor/mech.rn [--vars url=https://x/]
+pub async fn main() {
+    let url = cdp::stdin()?;
+    let nav = cdp::js(r#"return location.href"#, #{}).await?;
+    let v = cdp::js(r#"return (() => {
+  var d = document, out = { vendors: [] };
+  var ck = ''; try { ck = d.cookie || ''; } catch (e) {}
+  if (/(?:^|;\s*)(?:cf_clearance|__cf_bm)=/.test(ck)) out.vendors.push('cloudflare(cookie)');
+  if (/(?:^|;\s*)(?:_abck|ak_bmsc|bm_sz)=/.test(ck)) out.vendors.push('akamai(cookie)');
+  var s = d.querySelectorAll('script[src]'), cap = Math.min(s.length, 80);
+  var seen = {};
+  for (var i = 0; i < cap; i++) {
+    var u = s[i].src || '';
+    [['challenges.cloudflare.com','cloudflare'],['recaptcha','recaptcha'],['hcaptcha.com','hcaptcha'],['akamai','akamai'],['datadome','datadome'],['imperva','imperva'],['incapsula','imperva']].forEach(function (m) {
+      if (u.indexOf(m[0]) >= 0 && !seen[m[1]]) { seen[m[1]] = 1; out.vendors.push(m[1] + '(script)'); }
+    });
+  }
+  return out;
+})()"#, #{}).await?;
+    let merged = cdp::js(r#"return JSON.stringify({url: arguments ? null : null})"#, #{}).await?;
+    Ok(v)
+}

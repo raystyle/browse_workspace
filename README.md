@@ -1,49 +1,65 @@
-# browse_workspace：browse 的站点与机制知识仓
+# browse_workspace
 
-单仓维护 browse CLI 的触发式 skill 资产：domain-skills（域名触发，站点知识）与 page-skills（页面特征触发，含 scripts/ 特征判据 rn 脚本）。部署到三平台用户目录（Windows `%USERPROFILE%\.browse-rs\workspace`；Linux/macOS `~/.browse-rs/workspace`），git 维护：install 是 clone，update 是 pull，本地修改可 commit 后 push 回推本仓。
+browse 的技能仓（清仓重建，总台令 2026-10-09）。**技能的本体是双脚本对**：
+宿主侧 `mech.rn`（browse rune 编排）+ 页内侧 `probe.user.js`（油猴探针）。
+markdown（README.md）只作人读说明，不参与执行。
 
-browse 0.21.0 起本仓是多根加载的缺省根：`browse workspace add <路径>` 登记同构自定义仓（序首命中整胜，未覆盖段本仓仍生效）。
+## 结构
 
-## 三级发现面（agent 怎么用）
+```
+page-skills/
+  _prelude.js            # 判定 facts 游走（一次有界 DOM 走访）
+  <slug>/
+    mech.rn              # 宿主编排：驱动、等待、断言、被停止的那一方
+    probe.user.js        # 页内探针：@detect 判定块 + 常驻监听 + 上报/停止
+    README.md            # 可无：这对在等什么、data 字段、常驻怎么装
 
-1. **goto 自动点名**：`goto(url)` 回执命中时附 `domain_skills`（该站文件清单，封顶 10）与 `page_skills`（页面特征 slug 列表，带 CONFIRMED/PLAUSIBLE 置信档）及各自 hint 字段
-2. **hint 读全文**：`browse workspace site <段>` 读单站全文；`browse workspace page <slug>` 读单篇机制配方（免浏览器，CLI 直读文件）
+domain-skills/
+  <段>/                  # 与 page 同形（段 = 域名首段，如 bbc）
 
-点名不附正文：知识按需拉取，不占上下文。两层触发可独立关闭：`BROWSE_DOMAIN_SKILLS=0` / `BROWSE_PAGE_SKILLS=0`。
-
-## 目录约定
-
-| 目录 | 内容 | 触发方式 |
-| --- | --- | --- |
-| `domain-skills/<段>/<主题>.md` | 一站一目录，一文件一主题（选择器、结构、坑） | goto 按 URL 域名段点名 |
-| `page-skills/<slug>.md` | 一文件一机制配方（10 slug 首发，清单见该目录 README） | goto 按页面特征点名 |
-| `page-skills/scripts/probe.rn` | 页面特征判据脚本（browse 隐式加载，goto/detect 触发） | 多根序首命中覆写内置缺省；主世界 cdp::js 求值、browse 侧 8 秒界、超时/坏脚本静默降级零键；rn 脚本**不走 Jinja 模板道**（无 --vars，`{{ }}` 是字面） |
-
-前两目录即自定义仓契约：`browse workspace add` 登记的仓只需同构
-`domain-skills/<段>/` 与 `page-skills/<slug>.md`，goto/fetch 点名与
-site/page/list 读全文即吃多根序（配置固化 `~/.browse-rs/workspaces.json`，
-`BROWSE_WORKSPACE` env 钉死时单根最高、多根配置不生效）。
-是本仓扩充面，agent 侧 rg 反查，不进 browse 加载面，自定义仓不必有。
-
-## 部署
-
-```bash
-browse workspace install    # git clone 本仓到 ~/.browse-rs/workspace（BROWSE_WORKSPACE 可覆盖路径）
-browse workspace update     # git pull --ff-only；本地有未提交修改会拒绝
-browse workspace status     # 安装态、git 态、技能计数
-browse workspace list       # 列全部段与 slug
-browse workspace add ~/my-skills     # 登记自定义仓（同构两目录即吃点名；多根序首优先）
-browse workspace remove ~/my-skills  # 移除登记（本仓缺省根不受影响）
+scripts/                 # 参数化 JS 命令小程序（@ 实参 + --vars 模板道）
 ```
 
-没有 browse 时手工等价：`git clone https://github.com/raystyle/browse_workspace.git ~/.browse-rs/workspace`。
+## browse 怎么消费
 
-路径刻意不分 BROWSE_NAME 命名空间：站点知识是跨实例共享资产（与 daemon 端口、引擎 profile 的按名隔离相反）。
+- **判定热路径**（goto/detect 回执点名）：枚举各根 `page-skills/<slug>/probe.user.js`
+  的 `/* @detect */` 块，拼**一次**主世界求值（`_prelude.js` 提供 facts）；
+  无对零键。判据增改改本仓即可，免 browse 发版；**新 slug 名要进 browse
+  白名单才被点名**（攒批发版）。
+- **读全文**：`browse workspace page <slug>` / `site <段>`（README 或路径摘要）。
+- **跑编排**：`browse rune page-skills/<slug>/mech.rn`。
 
-## 回推口径
+## probe.user.js 约定
 
-本地加知识、修错字都欢迎回推：仓内改文件，`git -C ~/.browse-rs/workspace add -A && git commit -m "..." && git push`。`browse workspace update` 会拒绝覆盖未提交修改，先 commit 或 stash。不想回推公开仓的知识可放自管仓（fork 或私有 git 仓同构两目录），`browse workspace add <路径>` 登记即用。
+- 头部：`@match`（端口级锚定，勿 `*://*/*`）、`@connect 127.0.0.1`（与上报
+  URL 主机一致）、`@grant GM_xmlhttpRequest`、`@run-at`（探针
+  `document-idle`；钩请求的采集对 `document-start`）。
+- `/* @detect */ function browseDetect(facts) {...} /* @enddetect */`：
+  纯函数，命中返回 `{slug, confidence}`（两档 CONFIRMED/PLAUSIBLE），否则
+  `null`。只读 facts 或少量 querySelector，不改 DOM 不发请求。
+- 常驻腿：`GM_xmlhttpRequest` POST daemon——观察上报
+  `POST /events` `{type:'see', slug, url, data}`；条件停止
+  `POST /userscript/stop` `{slug, url, data}`（打断在跑的 mech.rn，回执带
+  capture）。端口占位 `%%BROWSE_PORT%%`（未替换时回落 9880）。
+- 大结果（采集正文）留页面内存，mech.rn 用 `cdp::js` 一次读走——事件环
+  只打摘要（容量 1000、单条 32KB）。
+- 多对共存：包 `fetch`/`history` 先看 Symbol（`_prelude.js` 的单包约定），
+  后装的只登记过滤器。
 
-## 与 browse 的版本关系
+## 首批九对（爬虫五 + 安全四）
 
-本仓是知识面，不锁 browse 版本；配方引用的命令面以 `browse --llms` 为准。browse 0.21.0 起面加多根自定义仓（`workspace add`/`remove`，#63）：本仓保持种子与缺省垫底根，自定义仓同构即插即用。
+爬虫：response-tap（钩响应采集）、scroll-until-end（滚到没有更多）、
+next-page（翻页）、spa-route（SPA 路由监听）、link-table（链接清单导出）。
+安全：challenge-stop（挑战页识别+条件停）、antibot-vendor（反爬产品识别）、
+fingerprint-watch（指纹 API 调用观察）、policy-surface（策略与敏感面侦察）。
+
+## 安装常驻脚本（P0，Userscript.* 域落地前）
+
+```bash
+pwsh install-userscripts.ps1 -ChromeProfile <引擎 user-data-dir> -UserJs page-skills/<slug>/probe.user.js
+```
+
+（置场 CLI 在 clean-chrome 仓 `tools/`。）装进 profile 的副本须替换
+`%%BROWSE_PORT%%`（命名实例换派生端口）；改了脚本要重装，pull 不热更新。
+采集对更推荐 mech.rn 注入道（`Page.addScriptToEvaluateOnNewDocument`，
+跑完不留 profile）——见各对 README。

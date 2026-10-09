@@ -1,0 +1,12 @@
+// challenge-stop 宿主编排:常驻垫底对(被 /userscript/stop 打断即本对生效)
+// 用法:browse rune page-skills/challenge-stop/mech.rn [--timeout 120]
+// 采集对(next-page/scroll-until-end)在跑时,本对常驻脚本见挑战即停它们。
+pub async fn main() {
+    let i = 0;
+    while i < 3600 {
+        time::sleep(time::Duration::from_secs(1)).await;
+        i = i + 1;
+    }
+    let v = cdp::js(r#"return "ran-to-end""#, #{}).await?;
+    Ok(v)
+}

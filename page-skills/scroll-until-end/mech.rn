@@ -1,0 +1,12 @@
+// scroll-until-end 宿主编排:按步滚动,稳定即被 stop(收齐信号)。
+// 用法:browse rune page-skills/scroll-until-end/mech.rn [--timeout 180]
+pub async fn main() {
+    let i = 0;
+    while i < 300 {
+        let r = cdp::js(r#"window.scrollBy(0, Math.max(600, window.innerHeight * 0.9)); return document.documentElement.scrollHeight"#, #{}).await?;
+        time::sleep(time::Duration::from_millis(600)).await;
+        i = i + 1;
+    }
+    let v = cdp::js(r#"return "scrolled-cap""#, #{}).await?;
+    Ok(v)
+}

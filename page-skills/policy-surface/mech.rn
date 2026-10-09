@@ -1,0 +1,20 @@
+// policy-surface 宿主编排:页内摘要 + CDP 响应头拼侦察报告
+pub async fn main() {
+    let page = cdp::js(r#"return (() => {
+  var d = document, out = {};
+  out.cspMeta = !!d.querySelector('meta[http-equiv="Content-Security-Policy"]');
+  out.passwordFields = d.querySelectorAll('input[type=password]').length;
+  var keyish = 0, total = 0;
+  try {
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i); total++;
+      if (/token|jwt|key|secret|sess/i.test(k)) keyish++;
+    }
+  } catch (e) {}
+  out.storageKeys = { total: total, sensitiveLike: keyish }; // 只报类别计数,值不读
+  return out;
+})()"#, #{}).await?;
+    let hdr = cdp::raw("Network.getCookies", "{}").await?;
+    let v = cdp::js(r#"return JSON.stringify({pageSide: arguments})"#, #{}).await?;
+    Ok(page)
+}

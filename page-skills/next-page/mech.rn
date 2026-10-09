@@ -1,0 +1,12 @@
+// next-page 宿主编排:点下一页等加载,空转/没有即被 stop。
+// 用法:browse rune page-skills/next-page/mech.rn [--timeout 300]
+pub async fn main() {
+    let i = 0;
+    while i < 200 {
+        let r = cdp::js(r#"(function(){var n=document.querySelector('a[rel=next],[rel="next"],[aria-label="Next"],a[aria-label="next"],a.next');if(n){n.click();return true}return false})()"#, #{}).await?;
+        time::sleep(time::Duration::from_millis(1500)).await;
+        i = i + 1;
+    }
+    let v = cdp::js(r#"return "pages-cap""#, #{}).await?;
+    Ok(v)
+}
