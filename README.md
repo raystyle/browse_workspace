@@ -82,9 +82,10 @@ human-gate（人机同环:通知+菜单闸,零轮询放行）。
 ## 六向增强谱系(油猴之于 rn,2026-10-10)
 
 ①武装-收割(等待搬进页面事件循环,消灭 attach 自扰;human-gate 的
-Promise 等待是样板) ②GM 服务桥(gm-bridge;**引擎注:clean-chrome
-GM_xhr 实测受 CORS 约束**——目标须配合 ACAO 或同源,与真 Tampermonkey
-的免 CORS 不同,跨域免 CORS 待引擎面) ③帧群(@match 每帧自动注入,
+Promise 等待是样板) ②GM 服务桥(gm-bridge;引擎注 2026-10-10 复测:
+GM_xhr 跨域免 CORS **已达标**,无需目标 ACAO 配合;油猴世界→主世界
+unsafeWindow 通道缺失在修 issue #78,跨世界 JS 对象面暂仍走 DOM 事件)
+③帧群(@match 每帧自动注入,
 跨源 iframe 零编排) ④长时程缓冲(采集比编排活得久,response-tap 形)
 ⑤人机同环(human-gate) ⑥真实时序(页内 dispatchEvent 序列)。
 三世界实测:油猴/rune(browse-rune)/主世界互不通 JS 对象,**DOM 属性
