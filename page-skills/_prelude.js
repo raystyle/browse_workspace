@@ -124,21 +124,28 @@ window.__probe = window.__probe || (function () {
   };
 
   // history 单包(路由观察)
+  // 路由观察:回调登记成表(history 只包一次,每个回调都要收到事件——
+  // grok 测试方案抓的 bug:旧形二次注册只听得到 popstate 听不到 pushState)
+  R._routeCbs = [];
   R.route = function (fn) {
     try {
-      var wrapped = function (kind) {
-        R.rearm(); // P1:路径作用域去重键随路由重武装(SPA 换页可再报)
-        try { fn({ kind: kind }); } catch (e) {}
+      // 单一通知道:包装与事件监听共用(每个登记回调都收到)
+      var notify = function (kind) {
+        R.rearm(); // 路径作用域去重键随路由重武装(SPA 换页可再报)
+        R._routeCbs.forEach(function (cb) {
+          try { cb({ kind: kind }); } catch (e) {}
+        });
       };
+      R._routeCbs.push(fn);
       if (!history.__probeWrapped) {
         var wp = history.pushState.bind(history);
         var wr = history.replaceState.bind(history);
-        history.pushState = function () { var r = wp.apply(history, arguments); wrapped('pushState'); return r; };
-        history.replaceState = function () { var r = wr.apply(history, arguments); wrapped('replaceState'); return r; };
+        history.pushState = function () { var r = wp.apply(history, arguments); notify('pushState'); return r; };
+        history.replaceState = function () { var r = wr.apply(history, arguments); notify('replaceState'); return r; };
         Object.defineProperty(history, '__probeWrapped', { value: true });
       }
-      window.addEventListener('popstate', function () { wrapped('popstate'); });
-      window.addEventListener('hashchange', function () { wrapped('hashchange'); });
+      window.addEventListener('popstate', function () { notify('popstate'); });
+      window.addEventListener('hashchange', function () { notify('hashchange'); });
     } catch (e) {}
   };
 

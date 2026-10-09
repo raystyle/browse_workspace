@@ -87,3 +87,13 @@ pwsh install-userscripts.ps1 -ChromeProfile <引擎 user-data-dir> -UserJs page-
 `%%BROWSE_PORT%%`（命名实例换派生端口）；改了脚本要重装，pull 不热更新。
 采集对更推荐 mech.rn 注入道（`Page.addScriptToEvaluateOnNewDocument`，
 跑完不留 profile）——见各对 README。
+
+## tests/(仓内回归网,grok 测试方案 2026-10-10)
+
+- **P0(每次改动必跑,零浏览器零 daemon)**:`node tests/check.mjs`(头检查+九张
+  @detect 表+prelude 运行时 vm 桩,82 例)与 `node tests/facts.mjs`(facts 游走
+  jsdom 黄金子集,19 例;需 `npm install` 装 devDependencies jsdom)。
+- **夹具页** `tests/fixtures/*.html`(plain/challenge/next/next-end/spa/list/
+  csp/password);P1 夜间真页腿将复用这套文件(不另造第二套)。
+- 边界:环语义/cta 闭集/对枚举在 browse_rs Rust 单测,仓侧不复制;
+  passwordVisible/docHeight 依赖布局,归真页腿不在 jsdom 锁。

@@ -1,0 +1,7 @@
+{
+  "name": "browse-workspace-tests",
+  "private": true,
+  "type": "module",
+  "scripts": { "check": "node tests/check.mjs", "facts": "node tests/facts.mjs" },
+  "devDependencies": { "jsdom": "^27.0.0" }
+}
