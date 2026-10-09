@@ -27,16 +27,24 @@ window.__probe = window.__probe || (function () {
   // 上报一条观察事件(P0 收口:探针只发动作枚举,cta 句子由 daemon 模板
   // 生成——页面可控侧不得供命令文本,grok 安全评审 2026-10-10)
   // opts: {slug, action('read'|'rune'|'export'), data, once(去重键), throttleMs}
+  // P1 去重默认键 = slug|action|location.pathname(同文档路径同建议只报
+  // 一次);路由变化(R.route/popstate)重武装——SPA 换页后同建议可再报。
+  // 显式 once 覆盖默认键。服务端另有 2 秒同键下限(双保险)。
+  R._defaultKey = function (opts) {
+    return (opts.slug || '') + '|' + (opts.action || '') + '|' + location.pathname;
+  };
+  R.rearm = function () {
+    R._seen = {};
+  };
   R.see = function (opts) {
     try {
-      if (opts.once) {
-        if (R._seen[opts.once]) return false;
-        R._seen[opts.once] = 1;
-      }
+      var key = opts.once || R._defaultKey(opts);
+      if (R._seen[key]) return false;
+      R._seen[key] = 1;
       if (opts.throttleMs) {
         var now = Date.now();
-        if (R._last[opts.once || opts.slug] && now - R._last[opts.once || opts.slug] < opts.throttleMs) return false;
-        R._last[opts.once || opts.slug] = now;
+        if (R._last[key] && now - R._last[key] < opts.throttleMs) return false;
+        R._last[key] = now;
       }
       var body = {
         type: 'see',
@@ -118,15 +126,19 @@ window.__probe = window.__probe || (function () {
   // history 单包(路由观察)
   R.route = function (fn) {
     try {
+      var wrapped = function (kind) {
+        R.rearm(); // P1:路径作用域去重键随路由重武装(SPA 换页可再报)
+        try { fn({ kind: kind }); } catch (e) {}
+      };
       if (!history.__probeWrapped) {
         var wp = history.pushState.bind(history);
         var wr = history.replaceState.bind(history);
-        history.pushState = function () { var r = wp.apply(history, arguments); try { fn({ kind: 'pushState' }); } catch (e) {} return r; };
-        history.replaceState = function () { var r = wr.apply(history, arguments); try { fn({ kind: 'replaceState' }); } catch (e) {} return r; };
+        history.pushState = function () { var r = wp.apply(history, arguments); wrapped('pushState'); return r; };
+        history.replaceState = function () { var r = wr.apply(history, arguments); wrapped('replaceState'); return r; };
         Object.defineProperty(history, '__probeWrapped', { value: true });
       }
-      window.addEventListener('popstate', function () { try { fn({ kind: 'popstate' }); } catch (e) {} });
-      window.addEventListener('hashchange', function () { try { fn({ kind: 'hashchange' }); } catch (e) {} });
+      window.addEventListener('popstate', function () { wrapped('popstate'); });
+      window.addEventListener('hashchange', function () { wrapped('hashchange'); });
     } catch (e) {}
   };
 
