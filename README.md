@@ -29,6 +29,28 @@ scripts/                 # 参数化 JS 命令小程序（@ 实参 + --vars 模�
 - **读全文**：`browse workspace page <slug>` / `site <段>`（README 或路径摘要）。
 - **跑编排**：`browse rune page-skills/<slug>/mech.rn`。
 
+## 探针运行时(window.__probe,probe-kit v1)
+
+`_prelude.js` 除判定 facts 外,还装常驻腿共享运行时 `window.__probe`:
+`R.see({slug,data,cta,once,throttleMs})`(观察上报,启发式 CTA 由探针按页况给)、
+`R.stop(slug,data)`(条件停止)、`R.tap(name,fn)`(fetch/XHR 单包钩注册表)、
+`R.route(fn)`(history 单包)、`R.onFlush(fn)`(beforeunload 收尾)。单探针
+异常被 try/catch 隔离,坏一个不掉全局。
+
+**装载时序**:判定拼批会在 goto 后把 __probe 装进主世界;document-start
+的常驻探针可能先于它跑——常驻腿用等待形取运行时(或自带最小回退):
+
+```js
+(function waitProbe(cb) {
+  if (window.__probe) return cb(window.__probe);
+  var t = setInterval(function () { if (window.__probe) { clearInterval(t); cb(window.__probe); } }, 300);
+  setTimeout(function () { clearInterval(t); }, 10000);
+})(function (R) { R.see({ slug: 'x', data: {}, cta: 'browse rune page-skills/x/mech.rn' }); });
+```
+
+cta 是**启发式**的:探针按观察到的页况决定指什么(跑编排/读配方/导出),
+不是静态表——消费面 `browse events` 直读。
+
 ## probe.user.js 约定
 
 - 头部：`@match`（端口级锚定，勿 `*://*/*`）、`@connect 127.0.0.1`（与上报
