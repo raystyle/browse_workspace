@@ -2,6 +2,17 @@
   "name": "browse-workspace-tests",
   "private": true,
   "type": "module",
-  "scripts": { "check": "node tests/check.mjs", "facts": "node tests/facts.mjs" },
-  "devDependencies": { "jsdom": "^27.0.0" }
+  "scripts": {
+    "check": "tsx tests/check.ts",
+    "facts": "tsx tests/facts.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^30.0.0",
+    "@types/node": "^26.6.4",
+    "jsdom": "^27.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "zod": "^4.6.5"
+  }
 }

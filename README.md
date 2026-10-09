@@ -90,9 +90,11 @@ pwsh install-userscripts.ps1 -ChromeProfile <引擎 user-data-dir> -UserJs page-
 
 ## tests/(仓内回归网,grok 测试方案 2026-10-10)
 
-- **P0(每次改动必跑,零浏览器零 daemon)**:`node tests/check.mjs`(头检查+九张
-  @detect 表+prelude 运行时 vm 桩,82 例)与 `node tests/facts.mjs`(facts 游走
-  jsdom 黄金子集,19 例;需 `npm install` 装 devDependencies jsdom)。
+- **P0(每次改动必跑,零浏览器零 daemon;TypeScript+zod 统一)**:`npm run check`
+  (tests/check.ts:头检查+九张 @detect 表+prelude 运行时 vm 桩,104 例)与
+  `npm run facts`(tests/facts.ts:facts 游走 jsdom 黄金子集,31 例);
+  `npm run typecheck` 过 tsc --noEmit。共享 schema 在 tests/lib.ts
+  (DetectHit/SeeBody/FactsShape 与断言器 Tally)。需 `npm install`。
 - **夹具页** `tests/fixtures/*.html`(plain/challenge/next/next-end/spa/list/
   csp/password);P1 夜间真页腿将复用这套文件(不另造第二套)。
 - 边界:环语义/cta 闭集/对枚举在 browse_rs Rust 单测,仓侧不复制;
