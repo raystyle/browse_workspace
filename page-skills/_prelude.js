@@ -24,8 +24,9 @@ window.__probe = window.__probe || (function () {
     _last: {}
   };
 
-  // 上报一条观察事件(启发式 CTA 由探针按页况给,不是静态表)
-  // opts: {slug, data, cta, once(去重键), throttleMs}
+  // 上报一条观察事件(P0 收口:探针只发动作枚举,cta 句子由 daemon 模板
+  // 生成——页面可控侧不得供命令文本,grok 安全评审 2026-10-10)
+  // opts: {slug, action('read'|'rune'|'export'), data, once(去重键), throttleMs}
   R.see = function (opts) {
     try {
       if (opts.once) {
@@ -42,7 +43,7 @@ window.__probe = window.__probe || (function () {
         slug: opts.slug || null,
         url: location.href,
         data: opts.data || null,
-        cta: opts.cta || null
+        action: opts.action || null
       };
       R._post('/events', body);
       return true;

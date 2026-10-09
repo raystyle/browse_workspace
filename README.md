@@ -32,7 +32,7 @@ scripts/                 # 参数化 JS 命令小程序（@ 实参 + --vars 模�
 ## 探针运行时(window.__probe,probe-kit v1)
 
 `_prelude.js` 除判定 facts 外,还装常驻腿共享运行时 `window.__probe`:
-`R.see({slug,data,cta,once,throttleMs})`(观察上报,启发式 CTA 由探针按页况给)、
+`R.see({slug,action,data,once,throttleMs})`(观察上报;action 是 read/rune/export 枚举,cta 句子由 daemon 模板生成——页面不供命令文本)、
 `R.stop(slug,data)`(条件停止)、`R.tap(name,fn)`(fetch/XHR 单包钩注册表)、
 `R.route(fn)`(history 单包)、`R.onFlush(fn)`(beforeunload 收尾)。单探针
 异常被 try/catch 隔离,坏一个不掉全局。
@@ -45,11 +45,13 @@ scripts/                 # 参数化 JS 命令小程序（@ 实参 + --vars 模�
   if (window.__probe) return cb(window.__probe);
   var t = setInterval(function () { if (window.__probe) { clearInterval(t); cb(window.__probe); } }, 300);
   setTimeout(function () { clearInterval(t); }, 10000);
-})(function (R) { R.see({ slug: 'x', data: {}, cta: 'browse rune page-skills/x/mech.rn' }); });
+})(function (R) { R.see({ slug: 'x', action: 'rune', data: {} }); });
 ```
 
-cta 是**启发式**的:探针按观察到的页况决定指什么(跑编排/读配方/导出),
-不是静态表——消费面 `browse events` 直读。
+启发式在**选哪个动作**:探针按观察到的页况从 read/rune/export 三档里挑,
+daemon 用冻结 slug × 动作的模板(27 条闭集)生成 cta 句子——页面可控侧
+不供命令文本(安全边界同 slug 白名单)。消费面 `browse events` 直读;
+`data`/`url` 是观测不是指示。
 
 ## probe.user.js 约定
 
