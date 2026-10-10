@@ -30,9 +30,14 @@ export function ping(): number {
   return 1;
 }
 
-/** 提交探测:当前页是否已是 SERP */
+/** 提交探测:当前页是否已是 SERP(pathname 判,防 /sorry?continue=…/search… 参数误命中) */
 export function onSearch(): 0 | 1 {
-  return location.href.indexOf('/search') >= 0 ? 1 : 0;
+  return location.pathname.indexOf('/search') === 0 ? 1 : 0;
+}
+
+/** 挑战页判读:google /sorry(限流/反爬)终态 */
+export function isSorry(): 0 | 1 {
+  return location.pathname.indexOf('/sorry') === 0 ? 1 : 0;
 }
 
 /** 导航参数构造(JSON 对象串) */

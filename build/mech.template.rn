@@ -65,6 +65,16 @@ return onSearch(args);"#, #{}).await {
         time::sleep(time::Duration::from_millis(300)).await;
         committed = committed + 1;
     }
+    // 挑战终态判读:/sorry = google 限流/反爬,原子错早退(不假绿,换出口 IP 走代理道)
+    let sorry = match cdp::js(r#"{{BODY:isSorry}}
+return isSorry(args);"#, #{}).await {
+        Ok(v) => v,
+        Err(_) => 0,
+    };
+    if sorry == 1 {
+        let surl = match cdp::js(r#"return location.href"#, #{}).await { Ok(v) => v, Err(_) => "" };
+        return Ok("{\"probe\": {\"slug\": \"google-search\", \"verdict\": \"challenged\", \"settled\": false, \"results\": [], \"url\": \"" + surl + "\"}, \"pages\": [], \"errors\": [" + adderr(errors, "serp", "sorry", "google /sorry 挑战页(IP 限流/反爬);换出口:引擎 --proxy 或候限流窗过") + "]}");
+    }
     if committed >= 30 {
         return Ok("{\"probe\": {\"slug\": \"google-search\", \"verdict\": \"nav-stall\", \"settled\": false, \"results\": [], \"url\": \"\", \"title\": \"\"}, \"pages\": [], \"errors\": [" + adderr(errors, "goto", "navigate", "SERP 未在提交探测窗内到位(不跳转/被拦/重定向)") + "]}");
     }

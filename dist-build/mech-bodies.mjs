@@ -7,7 +7,10 @@ function ping() {
   return 1;
 }
 function onSearch() {
-  return location.href.indexOf("/search") >= 0 ? 1 : 0;
+  return location.pathname.indexOf("/search") === 0 ? 1 : 0;
+}
+function isSorry() {
+  return location.pathname.indexOf("/sorry") === 0 ? 1 : 0;
 }
 function navParams(args) {
   return JSON.stringify({ url: args.u });
@@ -205,6 +208,7 @@ export {
   consentFinalize,
   extractPage,
   homeTargetId,
+  isSorry,
   navParams,
   onSearch,
   ping,
