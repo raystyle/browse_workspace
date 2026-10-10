@@ -51,6 +51,15 @@ for (const slug of slugs) {
   t.ok('google-search: mdream 暴露形在(window.mdream)', /window\.mdream\s*=/.test(vendor));
 }
 
+// ---------- ①c 生成物在位轻检(真 lint = build:tsc 类型 + esbuild 语法;此处只验在位与守卫) ----------
+{
+  const gsMech = readFileSync(join(PK, 'google-search/mech.rn'), 'utf8');
+  t.ok('google-search: mech 生成头在(勿手改)', gsMech.startsWith('// google-search 宿主编排(生成物'));
+  t.ok('google-search: mech 模板键只用在册 vars', [...new Set([...gsMech.matchAll(/<%=\s*(\w+)\s*%>/g)].map((m) => m[1]))].join(',') === 'q,top');
+  const gsProbeGen = readFileSync(join(PK, 'google-search/probe.user.js'), 'utf8');
+  t.ok('google-search: probe 生成头在(勿手改)', gsProbeGen.includes('本文件是生成物(build/build.mts 产'));
+}
+
 // ---------- ② 九张 @detect 表(vm 喂 facts) ----------
 function detectFn(slug: string): (facts: Record<string, unknown>) => DetectHitT | null {
   const src = readFileSync(join(PK, slug, 'probe.user.js'), 'utf8');

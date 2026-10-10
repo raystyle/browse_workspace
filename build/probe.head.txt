@@ -1,0 +1,19 @@
+// ==UserScript==
+// @name         google-search probe
+// @match        *://www.google.com/search*
+// @connect      127.0.0.1
+// @grant        GM_xmlhttpRequest
+// @run-at       document-start
+// ==/UserScript==
+// 本文件是生成物(build/build.mts 产;源 build/probe.main.ts + build/contracts.ts),勿手改。
+/* @detect */
+function browseDetect(facts) {
+  if (facts.isGoogleSerp && (facts.hasTurnstile || facts.hasChallengeDom)) {
+    return { slug: 'google-search', confidence: 'PLAUSIBLE' };
+  }
+  return null;
+}
+/* @enddetect */
+// ---- vendored mdream@2.0.1(官方 IIFE 发行形,WASM 内嵌 base64,MIT)----
+// 源:scripts/vendor/mdream.iife.js(exact 钉版 + .sha256 边车),本段与该件字节等,tests/check.ts 守卫。
+// 油猴世界执行不吃页面 CSP(用户裁定 con-06-add1);暴露 window.mdream(仅本世界)。

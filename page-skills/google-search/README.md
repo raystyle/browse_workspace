@@ -2,6 +2,8 @@
 
 Google SERP 判读与目标页研究对(REQ-035 双脚本对形)。Phase 1 零 browse 发版:显式 `browse rune` 与 userscript 安装道不吃 FROZEN_PAGE_SLUGS 白名单。
 
+> **生成体系(con-06 用户令:定好契约,编译生成)**:`mech.rn` 与 `probe.user.js` 是生成物,勿手改(手改会被下次 build 覆盖)。源在 `build/`:契约唯一权威 `contracts.ts`(zod schema + 通道常量 + 三要素帽 + 选择器),`probe.main.ts`(探针真体),`mech.bodies.ts`(mech 逐体 TS 函数),`mech.template.rn`(rune 骨架槽),`build.mts`(esbuild 生成器)。改逻辑 = 改 TS → `pnpm build`;tsc 即 lint,esbuild 即语法保证。
+
 ## 两步调用
 
 ```bash
@@ -19,6 +21,7 @@ browse rune page-skills/google-search/mech.rn --vars q=rust language --vars top=
 1. **快取结果**:裸 Page.navigate 不等 SERP load 尾;probe(document-start 注入)以结果指纹稳定(≥500ms 不变)判收齐,attr 带 `settled:true` 并向 daemon `/events` 发一次回调(携完整 url 列表);mech 挂 attr 观察器,写入即走不计时轮询
 2. **cdp 开标签访问结果页**:空签批量建 → 逐签点火导航(加载并行)→ 轮签等 `readystatechange-complete` 事件取**渲染内容**(`finalUrl` 即 goto 包裹跟跳后的真址)→ 回原签统一关访问签
 3. SERP 摘要:probe 在油猴世界用 vendored mdream 转 markdown(不吃页面 CSP,con-06-add1),异步补写不卡收齐信号
+4. **AI Overview 采集**:AI 分析块流式晚到——settled 后探针挂 MutationObserver 事件道(变更重置待稳,文本两拍稳 ≥1.2s 即收,10s 帽),块级 mdream 摘要随补;收不到即 `present:false` 不假绿
 
 ## 返回 schema(单 JSON)
 
@@ -30,6 +33,7 @@ browse rune page-skills/google-search/mech.rn --vars q=rust language --vars top=
     "mainHits": 8, "fallbackHits": 0, "settled": true,
     "results": [{ "title": "…", "url": "https://…", "wrapped": "goto|null", "snippet": "…", "via": "main|fallback" }],
     "markdown": "SERP 摘要(mdream)", "converter": "mdream@2.0.1/minimal|failed|…",
+    "ai_overview": { "present": true, "text": "AI 分析块(≤4K)", "markdown": "块级 mdream 摘要", "converter": "…" },
     "probe_debug": […时间线…], "v": "选择器版本", "url": "SERP 地址", "ts": 0
   },
   "pages": [{ "url": "请求址(goto 包裹或直址)", "finalUrl": "跟跳后真址", "title": "…", "ready": "complete", "text": "渲染文本(≤12K)", "html": "渲染 HTML(≤16K)" }],
