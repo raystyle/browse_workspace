@@ -5,7 +5,7 @@ import { build as esbuild } from 'esbuild';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import * as CAPS_SRC from './contracts.ts';
+import { CAPS, TEXT_CAPS } from './contracts.values.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = join(ROOT, 'dist-build');
@@ -16,10 +16,8 @@ mkdirSync(DIST, { recursive: true });
 function defines(): Record<string, string> {
   // 裸名 define:mech.bodies/probe.main 以 declare const + 裸名引用,编译期内联为字面量
   const d: Record<string, string> = {};
-  for (const grp of ['CAPS', 'TEXT_CAPS'] as const) {
-    for (const [k, v] of Object.entries(CAPS_SRC[grp] as Record<string, unknown>)) {
-      d[k] = JSON.stringify(v);
-    }
+  for (const [k, v] of Object.entries({ ...CAPS, ...TEXT_CAPS } as Record<string, unknown>)) {
+    d[k] = JSON.stringify(v);
   }
   return d;
 }

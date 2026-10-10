@@ -1,7 +1,7 @@
 // probe.main.ts — google-search probe 本体(TS 源,esbuild 出 IIFE 进 probe.user.js)
 // 运行环境:clean-chrome 油猴世界(GM_xmlhttpRequest 可用,不吃页面 CSP)。
 // 三要素:事件驱动(observer/指纹稳定)、原子错误(终态如实,converter 记失败形)、超时兜底(CAPS)。
-import { CAPS, CHANNEL, SELECTORS, TEXT_CAPS } from './contracts';
+import { CAPS, CHANNEL, SELECTORS, TEXT_CAPS } from './contracts.values.ts';
 
 declare const GM_xmlhttpRequest: (o: Record<string, unknown>) => void;
 
@@ -280,6 +280,8 @@ function collect(forceSettled?: boolean): void {
 
 // 收集期(document-start 早注入;interval 驱动,变更只记时不排程——SERP 动画变更流
 // 会饿死去抖排程)。链接在页即出 attr;收齐 = 指纹稳定(两拍不变)或页面完成静默或 12s 帽。
+// boot 守卫:document-start 提交早于 <html> 现身时 documentElement 为 null,直接 observe 会炸
+// 整个 IIFE(轮8 全败根因);有界等 documentElement 到位再启动。
 let lastFp: string | null = null;
 let lastFpAt = 0;
 let finalized = false;
@@ -288,22 +290,30 @@ function disconnectAll(): void {
   if (iv !== null) { clearInterval(iv); iv = null; }
   if (mo) { mo.disconnect(); mo = null; }
 }
-mo = new MutationObserver(() => { lastMut = Date.now(); });
-mo.observe(document.documentElement, { childList: true, subtree: true });
-iv = setInterval(() => {
-  if (finalized) return;
-  const now = Date.now();
-  const fp = JSON.stringify(pickMain().map((r) => r.url));
-  if (fp !== lastFp) {
-    lastFp = fp; lastFpAt = now;
-    collect(false);
-    return;
+function boot(): void {
+  mo = new MutationObserver(() => { lastMut = Date.now(); });
+  mo.observe(document.documentElement, { childList: true, subtree: true });
+  iv = setInterval(() => {
+    if (finalized) return;
+    const now = Date.now();
+    const fp = JSON.stringify(pickMain().map((r) => r.url));
+    if (fp !== lastFp) {
+      lastFp = fp; lastFpAt = now;
+      collect(false);
+      return;
+    }
+    const stable = now - lastFpAt >= 500 && JSON.parse(fp).length > 0;
+    const pageDone = document.readyState === 'complete' && now - lastMut >= 800;
+    if (stable || pageDone || now - STARTED >= 12000) {
+      finalized = true;
+      disconnectAll();
+      collect(true);
+    }
+  }, 250);
+}
+const bootWait: ReturnType<typeof setInterval> = setInterval(() => {
+  if (document.documentElement) {
+    clearInterval(bootWait);
+    boot();
   }
-  const stable = now - lastFpAt >= 500 && JSON.parse(fp).length > 0;
-  const pageDone = document.readyState === 'complete' && now - lastMut >= 800;
-  if (stable || pageDone || now - STARTED >= 12000) {
-    finalized = true;
-    disconnectAll();
-    collect(true);
-  }
-}, 250);
+}, 50);

@@ -72,7 +72,15 @@ return onSearch(args);"#, #{}).await {
     let plan0 = match cdp::js(r#"{{BODY:waitSettled}}
 return waitSettled(args);"#, #{"top" : top}).await {
         Ok(v) => v,
-        Err(e) => { return Ok(fail1(errors, "settle", "js", e.message)); }
+        Err(e) => {
+            // 导航竞态(Inspected target navigated or closed:sei 重定向杀求值)重试一道
+            time::sleep(time::Duration::from_millis(800)).await;
+            match cdp::js(r#"{{BODY:waitSettled}}
+return waitSettled(args);"#, #{"top" : top}).await {
+                Ok(v2) => v2,
+                Err(e2) => { return Ok(fail1(errors, "settle", "js", e2.message)); }
+            }
+        }
     };
     // 自愈:probe 全无 = 注入 hiccup,刷页面重来一轮(reload 独立求值:导航销毁当前上下文)
     let p_missing = match cdp::js(r#"{{BODY:probeMissing}}
@@ -150,7 +158,15 @@ return tabNavParams(args);"#, #{"plan" : plan, "k" : k}).await {
         let content = match cdp::js(r#"{{BODY:extractPage}}
 return extractPage(args);"#, #{"plan" : plan, "k" : e2}).await {
             Ok(v) => v,
-            Err(er) => "{\"url\":\"eval-failed\",\"nav\":\"eval-failed\",\"error\":\"" + er.message.replace("\"", "\\\"") + "\"}"
+            Err(er) => {
+                // 导航竞态(goto 包裹 302 链)重试一道
+                time::sleep(time::Duration::from_millis(800)).await;
+                match cdp::js(r#"{{BODY:extractPage}}
+return extractPage(args);"#, #{"plan" : plan, "k" : e2}).await {
+                    Ok(v2) => v2,
+                    Err(er2) => "{\"url\":\"eval-failed\",\"nav\":\"eval-failed\",\"error\":\"" + er2.message.replace("\"", "\\\"") + "\"}"
+                }
+            }
         };
         if pages == "" { pages = content; } else { pages = pages + "," + content; }
         e2 = e2 + 1;

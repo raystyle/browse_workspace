@@ -125,7 +125,56 @@ return onSearch(args);"#, #{}).await {
 }
 return waitSettled(args);"#, #{"top" : top}).await {
         Ok(v) => v,
-        Err(e) => { return Ok(fail1(errors, "settle", "js", e.message)); }
+        Err(e) => {
+            // 导航竞态(Inspected target navigated or closed:sei 重定向杀求值)重试一道
+            time::sleep(time::Duration::from_millis(800)).await;
+            match cdp::js(r#"function waitSettled(args) {
+  void args;
+  return (async () => {
+    let guardN = 0;
+    while (!(document.documentElement && document.documentElement.getAttribute)) {
+      await new Promise((r) => setTimeout(r, 100));
+      guardN++;
+      if (guardN > Math.floor(3e3 / 100)) break;
+    }
+    const getp = () => {
+      try {
+        return JSON.parse(document.documentElement.getAttribute("probe") || "null");
+      } catch {
+        return null;
+      }
+    };
+    const p = await new Promise((resolve) => {
+      let done = false;
+      const finish = (v) => {
+        if (done) return;
+        done = true;
+        resolve(v);
+      };
+      const cur = getp();
+      if (cur && cur.settled) return finish(cur);
+      const mo = new MutationObserver(() => {
+        const v = getp();
+        if (v && v.settled) {
+          mo.disconnect();
+          finish(v);
+        }
+      });
+      mo.observe(document.documentElement, { attributes: true, attributeFilter: ["probe"] });
+      setTimeout(() => {
+        mo.disconnect();
+        finish(getp());
+      }, 2e4);
+    });
+    const pr = p;
+    return JSON.stringify({ probe: p, urls: pr && pr.results ? pr.results.map((r) => r.url) : [] });
+  })();
+}
+return waitSettled(args);"#, #{"top" : top}).await {
+                Ok(v2) => v2,
+                Err(e2) => { return Ok(fail1(errors, "settle", "js", e2.message)); }
+            }
+        }
     };
     // 自愈:probe 全无 = 注入 hiccup,刷页面重来一轮(reload 独立求值:导航销毁当前上下文)
     let p_missing = match cdp::js(r#"function probeMissing(args) {
@@ -327,7 +376,38 @@ return tabNavParams(args);"#, #{"plan" : plan, "k" : k}).await {
 }
 return extractPage(args);"#, #{"plan" : plan, "k" : e2}).await {
             Ok(v) => v,
-            Err(er) => "{\"url\":\"eval-failed\",\"nav\":\"eval-failed\",\"error\":\"" + er.message.replace("\"", "\\\"") + "\"}"
+            Err(er) => {
+                // 导航竞态(goto 包裹 302 链)重试一道
+                time::sleep(time::Duration::from_millis(800)).await;
+                match cdp::js(r#"function extractPage(args) {
+  return (async () => {
+    await new Promise((resolve) => {
+      if (document.readyState === "complete") return resolve();
+      const onr = () => {
+        if (document.readyState === "complete") {
+          document.removeEventListener("readystatechange", onr);
+          resolve();
+        }
+      };
+      document.addEventListener("readystatechange", onr);
+      setTimeout(resolve, 12e3);
+    });
+    return JSON.stringify({
+      url: args.plan.urls[args.k],
+      finalUrl: location.href,
+      nav: /^https?:/.test(location.href) ? "ok" : "failed",
+      title: document.title,
+      ready: document.readyState,
+      text: String(document.body && document.body.innerText || "").slice(0, TEXT_pageText),
+      html: document.documentElement.outerHTML.slice(0, TEXT_pageHtml)
+    });
+  })();
+}
+return extractPage(args);"#, #{"plan" : plan, "k" : e2}).await {
+                    Ok(v2) => v2,
+                    Err(er2) => "{\"url\":\"eval-failed\",\"nav\":\"eval-failed\",\"error\":\"" + er2.message.replace("\"", "\\\"") + "\"}"
+                }
+            }
         };
         if pages == "" { pages = content; } else { pages = pages + "," + content; }
         e2 = e2 + 1;
