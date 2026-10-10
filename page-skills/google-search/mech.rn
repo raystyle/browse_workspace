@@ -1,0 +1,117 @@
+// google-search 宿主编排:快取 SERP 结果(指纹收齐事件驱动)+ cdp 开标签并行访问结果页取渲染内容,单 JSON 返回。
+// 用法:browse rune page-skills/google-search/mech.rn --vars q=<查询词> --vars top=5
+// 返回:{probe:{verdict,drift,results,markdown,converter,settled,...},pages:[{url,finalUrl,title,text,html},...],errors:[...]}
+// 时效与机制(用户令 con-06):不等 SERP load 尾(裸 Page.navigate),探针指纹稳定即收齐(~1s);
+// 目标页 cdp 开标签访问:newTab 空签批量建 → 逐签点火导航(加载并行)→ 轮签等 readystatechange-complete
+// 事件取渲染内容(finalUrl 即 goto 包裹跟跳后的真址)→ closeTab(own 守卫内)回收,原签 switchTab 复位。
+// 挑战终态即 verdict=challenged 证据回执,不设 HTTP 抓 google 兜底、不假绿。
+pub async fn main() {
+    let q = "<%= q %>";
+    let top = <%= top %>;
+    // URL 构造在页面侧 encodeURIComponent(args 对象道,注入安全);num 恒 10:
+    // Google num<10 实测缩自然结果(num=6 只出 3 条),top 只管跟进条数不管请求条数
+    let u = cdp::js(r#"return "https://www.google.com/search?q=" + encodeURIComponent(args.q) + "&num=10";"#, #{"q" : q, "top" : top}).await?;
+    // 裸导航不等 load 尾;提交探测(有界轮,每跳新求值防导航中求值被断)
+    let nj = cdp::js(r#"return JSON.stringify({ url: args.u })"#, #{"u" : u}).await?;
+    let _ = cdp::raw("Page.navigate", nj).await?;
+    let committed = 0;
+    while committed < 30 {
+        let onit = cdp::js(r#"return location.href.indexOf('/search') >= 0 ? 1 : 0"#, #{}).await?;
+        if onit == 1 {
+            break;
+        }
+        time::sleep(time::Duration::from_millis(300)).await;
+        committed = committed + 1;
+    }
+    // 段A:等收齐信号(probe 指纹稳定写 settled attr;观察器即返,20s 帽)+ consent 处置;回 urls JSON
+    let plan = cdp::js(r#"
+        function getp() { try { return JSON.parse(document.documentElement.getAttribute('probe') || 'null'); } catch (e) { return null; } }
+        var p = await new Promise(function (resolve) {
+            var done = false;
+            function finish(v) { if (done) return; done = true; resolve(v); }
+            var cur = getp();
+            if (cur && cur.settled) return finish(cur);
+            var mo = new MutationObserver(function () {
+                var v = getp();
+                if (v && v.settled) { mo.disconnect(); finish(v); }
+            });
+            mo.observe(document.documentElement, { attributes: true, attributeFilter: ['probe'] });
+            setTimeout(function () { mo.disconnect(); finish(getp()); }, 20000);
+        });
+        // consent 接受后重读(合成点击;受信 clickRef 需 rune 侧 ref 表手术,偏离记 receipt)
+        if (p && p.verdict === 'consent') {
+            var btns = document.querySelectorAll('#consent button, form[action*="consent"] button, div[role="dialog"] button');
+            for (var bi = 0; bi < btns.length; bi++) {
+                var t = String(btns[bi].innerText || btns[bi].getAttribute('aria-label') || '');
+                if (/accept all|agree|accept/i.test(t)) { btns[bi].click(); break; }
+            }
+            await new Promise(function (resolve) { setTimeout(resolve, 2500); });
+            p = await new Promise(function (resolve) {
+                var done2 = false;
+                function finish2(v) { if (done2) return; done2 = true; resolve(v); }
+                var cur2 = getp();
+                if (cur2 && cur2.settled) return finish2(cur2);
+                var mo2 = new MutationObserver(function () {
+                    var v2 = getp();
+                    if (v2 && v2.settled) { mo2.disconnect(); finish2(v2); }
+                });
+                mo2.observe(document.documentElement, { attributes: true, attributeFilter: ['probe'] });
+                setTimeout(function () { mo2.disconnect(); finish2(getp()); }, 15000);
+            });
+        }
+        var urls = (p && p.results) ? p.results.slice(0, Number(args.top)).map(function (r) { return r.url; }) : [];
+        return JSON.stringify({ probe: p, urls: urls });
+    "#, #{"top" : top}).await?;
+    // 段B:cdp 开标签并行访问。rune 持串(probe 面 + urls + 内容累积),不赖各签 window
+    let home = cdp::dialect("currentTab", "").await?;
+    let home_id = cdp::js(r#"return JSON.stringify((args.r && args.r.targetId) || null)"#, #{"r" : home}).await?;
+    let n = cdp::js(r#"return JSON.parse(args.plan).urls.length"#, #{"plan" : plan}).await?;
+    // 批量建空签并逐签点火导航(newTab 即活动路由;导航后台并行加载)
+    let ids = "";
+    let k = 0;
+    while k < n {
+        let t = cdp::dialect("newTab", "").await?;
+        let tid = cdp::js(r#"return JSON.stringify(args.r.targetId)"#, #{"r" : t}).await?;
+        let navj = cdp::js(r#"return JSON.stringify({ url: JSON.parse(args.plan).urls[args.k] })"#, #{"plan" : plan, "k" : k}).await?;
+        let _ = cdp::raw("Page.navigate", navj).await?;
+        if ids == "" {
+            ids = tid;
+        } else {
+            ids = ids + "," + tid;
+        }
+        k = k + 1;
+    }
+    // 轮签取内容:switchTab 切路由 → readystatechange-complete 事件等 → 渲染内容提取。
+    // 签在本循环不关:closeTab 后活动路由仍指死 session,参数构建 js 会撞;统一回原签后再关(closeTab 浏览器级,不必目标签活动)
+    let pages = "";
+    let e = 0;
+    while e < n {
+        let swj = cdp::js(r#"return JSON.stringify([JSON.parse(args.ids)[args.k]])"#, #{"ids" : "[" + ids + "]", "k" : e}).await?;
+        let _ = cdp::dialect("switchTab", swj).await?;
+        let content = cdp::js(r#"
+            await new Promise(function (resolve) {
+                if (document.readyState === 'complete') return resolve(1);
+                document.addEventListener('readystatechange', function onr() { if (document.readyState === 'complete') { document.removeEventListener('readystatechange', onr); resolve(1); } });
+                setTimeout(function () { resolve(1); }, 12000);
+            });
+            return JSON.stringify({ url: JSON.parse(args.plan).urls[args.k], finalUrl: location.href, title: document.title, ready: document.readyState, text: String((document.body && document.body.innerText) || '').slice(0, 12000), html: document.documentElement.outerHTML.slice(0, 16000) });
+        "#, #{"plan" : plan, "k" : e}).await?;
+        if pages == "" {
+            pages = content;
+        } else {
+            pages = pages + "," + content;
+        }
+        e = e + 1;
+    }
+    // 回原签 → 统一关访问签 → 收口(probe 面重读新鲜 attr:md 补写早于访问完成)
+    let home_sw = cdp::js(r#"return JSON.stringify([JSON.parse(args.h)])"#, #{"h" : home_id}).await?;
+    let _ = cdp::dialect("switchTab", home_sw).await?;
+    let c = 0;
+    while c < n {
+        let clj = cdp::js(r#"return JSON.stringify([JSON.parse(args.ids)[args.k]])"#, #{"ids" : "[" + ids + "]", "k" : c}).await?;
+        let _ = cdp::dialect("closeTab", clj).await?;
+        c = c + 1;
+    }
+    let out = cdp::js(r#"return JSON.stringify({ probe: (function () { try { return JSON.parse(document.documentElement.getAttribute('probe') || 'null'); } catch (e) { return null; } })() || JSON.parse(args.plan).probe, pages: JSON.parse('[' + args.pages + ']'), errors: [] })"#, #{"plan" : plan, "pages" : pages}).await?;
+    Ok(out)
+}

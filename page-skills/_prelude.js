@@ -191,6 +191,9 @@ try {
   };
 
   facts.hasRelNext = !!d.querySelector('a[rel=next],[rel="next"],[aria-label="Next"],a[aria-label="next"]');
+  facts.isGoogleSerp = (function () {
+    try { return w.location.hostname === 'www.google.com' && w.location.pathname.indexOf('/search') === 0; } catch (e) { return false; }
+  })();
   facts.docHeight = Math.max(d.documentElement ? d.documentElement.scrollHeight : 0, d.body.scrollHeight);
   facts.viewportHeight = w.innerHeight || 0;
   facts.passwordVisible = (function () {

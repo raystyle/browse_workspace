@@ -1,0 +1,3 @@
+# 字节敏感件禁行尾转换:vendor sha256 边车与 probe 内嵌字节等守卫跨平台成立的前提
+scripts/vendor/* -text
+page-skills/google-search/probe.user.js -text

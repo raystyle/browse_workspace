@@ -1,6 +1,7 @@
 // check.ts — browse_workspace P0 回归网(grok 测试方案 2026-10-10;TS+zod 统一)
 // 零浏览器零 daemon:头检查 + 九张 @detect 表 + prelude 运行时(vm 桩)。
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
@@ -15,10 +16,10 @@ const slugs = readdirSync(PK, { withFileTypes: true })
   .filter((e) => e.isDirectory())
   .map((e) => e.name)
   .sort();
-t.eq('十一对在册', slugs, [
+t.eq('十二对在册', slugs, [
   'antibot-vendor', 'challenge-stop', 'fingerprint-watch', 'gm-bridge',
-  'human-gate', 'link-table', 'next-page', 'policy-surface', 'response-tap',
-  'scroll-until-end', 'spa-route',
+  'google-search', 'human-gate', 'link-table', 'next-page', 'policy-surface',
+  'response-tap', 'scroll-until-end', 'spa-route',
 ]);
 for (const slug of slugs) {
   const dir = join(PK, slug);
@@ -38,6 +39,18 @@ for (const slug of slugs) {
   t.ok(`${slug}: @run-at 只认 start/idle`, runAt === 'document-start' || runAt === 'document-idle', String(runAt));
 }
 
+// ---------- ①b vendor 钉版守卫(google-search 内嵌 mdream) ----------
+{
+  const vendor = readFileSync(join(ROOT, 'scripts/vendor/mdream.iife.js'), 'utf8');
+  const sidecar = readFileSync(join(ROOT, 'scripts/vendor/mdream.iife.js.sha256'), 'utf8').trim();
+  const actual = createHash('sha256').update(vendor).digest('hex');
+  t.ok('vendor: mdream sha256 边车对账', sidecar.startsWith(actual), `sidecar=${sidecar} actual=${actual}`);
+  t.ok('vendor: LICENSE 注记在', existsSync(join(ROOT, 'scripts/vendor/LICENSE-mdream.txt')));
+  const gsProbe = readFileSync(join(PK, 'google-search/probe.user.js'), 'utf8');
+  t.ok('google-search: vendored mdream 字节等内嵌', gsProbe.includes(vendor));
+  t.ok('google-search: mdream 暴露形在(window.mdream)', /window\.mdream\s*=/.test(vendor));
+}
+
 // ---------- ② 九张 @detect 表(vm 喂 facts) ----------
 function detectFn(slug: string): (facts: Record<string, unknown>) => DetectHitT | null {
   const src = readFileSync(join(PK, slug, 'probe.user.js'), 'utf8');
@@ -55,6 +68,7 @@ const SE: DetectHitT = { slug: 'scroll-until-end', confidence: 'PLAUSIBLE' };
 const NP: DetectHitT = { slug: 'next-page', confidence: 'CONFIRMED' };
 const SR: DetectHitT = { slug: 'spa-route', confidence: 'PLAUSIBLE' };
 const PS: DetectHitT = { slug: 'policy-surface', confidence: 'PLAUSIBLE' };
+const GS: DetectHitT = { slug: 'google-search', confidence: 'PLAUSIBLE' };
 const TABLE: ReadonlyArray<readonly [string, Record<string, unknown>, DetectHitT | null]> = [
   ['challenge-stop', { hasTurnstile: true }, CS],
   ['challenge-stop', { hasChallengeDom: true }, CS],
@@ -97,6 +111,13 @@ const TABLE: ReadonlyArray<readonly [string, Record<string, unknown>, DetectHitT
   ['policy-surface', { passwordVisible: true }, PS],
   ['policy-surface', { cspMeta: true, passwordVisible: true }, PS], // 仍是一条不是两条
   ['policy-surface', {}, null],
+  ...([
+    ['google-search', { isGoogleSerp: true, hasTurnstile: true }],
+    ['google-search', { isGoogleSerp: true, hasChallengeDom: true }],
+  ] as const).map(([slug, facts]) => [slug, facts, GS] as const),
+  ['google-search', { isGoogleSerp: true }, null], // SERP 正常态不点名,走显式 rune 道
+  ['google-search', { hasTurnstile: true }, null], // 非 google 页不点名
+  ['google-search', {}, null],
 ];
 for (const [slug, facts, want] of TABLE) {
   const got = detectFn(slug)(facts);
