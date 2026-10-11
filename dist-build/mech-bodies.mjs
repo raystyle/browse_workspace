@@ -16,7 +16,8 @@ function navParams(args) {
   return JSON.stringify({ url: args.u });
 }
 function tabNavParams(args) {
-  return JSON.stringify({ url: args.plan.urls[args.k] });
+  const plan = typeof args.plan === "string" ? JSON.parse(args.plan) : args.plan;
+  return JSON.stringify({ url: plan.urls[args.k] });
 }
 function waitSettled(args) {
   void args;
@@ -61,7 +62,8 @@ function waitSettled(args) {
   })();
 }
 function probeMissing(args) {
-  return args.plan.probe === null || args.plan.probe === void 0 ? 1 : 0;
+  const plan = typeof args.plan === "string" ? JSON.parse(args.plan) : args.plan;
+  return plan.probe === null || plan.probe === void 0 ? 1 : 0;
 }
 function reload() {
   location.reload();
@@ -110,6 +112,7 @@ function waitSettledReload() {
 }
 function consentFinalize(args) {
   return (async () => {
+    const plan = typeof args.plan === "string" ? JSON.parse(args.plan) : args.plan;
     const getp = () => {
       try {
         return JSON.parse(document.documentElement.getAttribute("probe") || "null");
@@ -117,7 +120,7 @@ function consentFinalize(args) {
         return null;
       }
     };
-    let p = args.plan.probe;
+    let p = plan.probe;
     if (p && p.verdict === "consent") {
       const btns = document.querySelectorAll('#consent button, form[action*="consent"] button, div[role="dialog"] button');
       for (let bi = 0; bi < btns.length; bi++) {
@@ -156,7 +159,8 @@ function consentFinalize(args) {
   })();
 }
 function urlCount(args) {
-  return args.plan.urls.length;
+  const plan = typeof args.plan === "string" ? JSON.parse(args.plan) : args.plan;
+  return plan.urls.length;
 }
 function targetIdOf(args) {
   return JSON.stringify(args.r.targetId);
@@ -165,6 +169,7 @@ function homeTargetId(args) {
   return JSON.stringify(args.r && args.r.targetId || null);
 }
 function extractPage(args) {
+  const plan = typeof args.plan === "string" ? JSON.parse(args.plan) : args.plan;
   return (async () => {
     await new Promise((resolve) => {
       if (document.readyState === "complete") return resolve();
@@ -178,17 +183,18 @@ function extractPage(args) {
       setTimeout(resolve, 12e3);
     });
     return JSON.stringify({
-      url: args.plan.urls[args.k],
+      url: plan.urls[args.k],
       finalUrl: location.href,
       nav: /^https?:/.test(location.href) ? "ok" : "failed",
       title: document.title,
       ready: document.readyState,
-      text: String(document.body && document.body.innerText || "").slice(0, TEXT_pageText),
-      html: document.documentElement.outerHTML.slice(0, TEXT_pageHtml)
+      text: String(document.body && document.body.innerText || "").slice(0, 12e3),
+      html: document.documentElement.outerHTML.slice(0, 16e3)
     });
   })();
 }
 function assemble(args) {
+  const plan = typeof args.plan === "string" ? JSON.parse(args.plan) : args.plan;
   const fresh = (() => {
     try {
       return JSON.parse(document.documentElement.getAttribute("probe") || "null");
@@ -197,9 +203,9 @@ function assemble(args) {
     }
   })();
   return JSON.stringify({
-    probe: fresh || args.plan.probe,
+    probe: fresh || plan.probe,
     pages: JSON.parse("[" + args.pages + "]"),
-    errors: args.plan.probe ? [] : [{ stage: "probe", op: "attr", message: "probe attr \u672A\u73B0" }]
+    errors: plan.probe ? [] : [{ stage: "probe", op: "attr", message: "probe attr \u672A\u73B0" }]
   });
 }
 export {

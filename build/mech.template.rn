@@ -9,7 +9,7 @@ pub async fn main() {
     let top = <%= top %>;
     let errors = "";
     fn adderr(errors, stage, op, message) {
-        let m = message.replace("\\", "\\\\").replace("\"", "\\\"");
+        let m = message.replace("\r", " ").replace("\n", " ").replace("\\", "\\\\").replace("\"", "\\\"");
         let item = "{\"stage\":\"" + stage + "\",\"op\":\"" + op + "\",\"message\":\"" + m + "\"}";
         if errors == "" { item } else { errors + "," + item }
     }
@@ -92,6 +92,16 @@ return waitSettled(args);"#, #{"top" : top}).await {
             }
         }
     };
+    // 迟到 sorry 复查:重定向常发生在提交探测之后(null 时先判挑战页,不空耗 reload)
+    let sorry2 = match cdp::js(r#"{{BODY:isSorry}}
+return isSorry(args);"#, #{}).await {
+        Ok(v) => v,
+        Err(_) => 0,
+    };
+    if sorry2 == 1 {
+        let surl2 = match cdp::js(r#"return location.href"#, #{}).await { Ok(v) => v, Err(_) => "" };
+        return Ok("{\"probe\": {\"slug\": \"google-search\", \"verdict\": \"challenged\", \"settled\": false, \"results\": [], \"url\": \"" + surl2 + "\"}, \"pages\": [], \"errors\": [" + adderr(errors, "serp", "sorry", "google /sorry 挑战页(IP 限流/反爬,迟到形);换出口或候配额窗") + "]}");
+    }
     // 自愈:probe 全无 = 注入 hiccup,刷页面重来一轮(reload 独立求值:导航销毁当前上下文)
     let p_missing = match cdp::js(r#"{{BODY:probeMissing}}
 return probeMissing(args);"#, #{"plan" : plan0}).await {
@@ -174,7 +184,7 @@ return extractPage(args);"#, #{"plan" : plan, "k" : e2}).await {
                 match cdp::js(r#"{{BODY:extractPage}}
 return extractPage(args);"#, #{"plan" : plan, "k" : e2}).await {
                     Ok(v2) => v2,
-                    Err(er2) => "{\"url\":\"eval-failed\",\"nav\":\"eval-failed\",\"error\":\"" + er2.message.replace("\"", "\\\"") + "\"}"
+                    Err(er2) => "{\"url\":\"eval-failed\",\"nav\":\"eval-failed\",\"error\":\"" + er2.message.replace("\r", " ").replace("\n", " ").replace("\\", "\\\\").replace("\"", "\\\"") + "\"}"
                 }
             }
         };

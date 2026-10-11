@@ -46,8 +46,9 @@ export function navParams(args: { u: string }): string {
 }
 
 /** 目标签导航参数构造 */
-export function tabNavParams(args: { plan: { urls: string[] }; k: number }): string {
-  return JSON.stringify({ url: args.plan.urls[args.k] });
+export function tabNavParams(args: { plan: unknown; k: number }): string {
+  const plan = typeof args.plan === 'string' ? JSON.parse(args.plan) : args.plan;
+  return JSON.stringify({ url: plan.urls[args.k] });
 }
 
 /** 段A-1:文档守卫 + settled 等待(事件驱动观察器,帽 settleAwait) */
@@ -81,8 +82,10 @@ export function waitSettled(args: { top: number }): string {
 }
 
 /** probe 缺席判定(0 = 缺席需自愈) */
-export function probeMissing(args: { plan: { probe: unknown } }): 0 | 1 {
-  return args.plan.probe === null || args.plan.probe === undefined ? 1 : 0;
+export function probeMissing(args: { plan: unknown }): 0 | 1 {
+  // 通道传 JSON 字符串,类型面是对象——先解(通道诚实:args.plan 恒串,勿再类型化直取)
+  const plan = typeof args.plan === 'string' ? JSON.parse(args.plan) : args.plan;
+  return plan.probe === null || plan.probe === undefined ? 1 : 0;
 }
 
 /** 刷新自愈:reload 必须独立求值(导航销毁当前求值上下文) */
@@ -121,12 +124,13 @@ export function waitSettledReload(): string {
 }
 
 /** 段A-2:consent 处置与终 plan(urls 截 top) */
-export function consentFinalize(args: { top: number; plan: { probe: unknown } }): string {
+export function consentFinalize(args: { top: number; plan: unknown }): string {
   return (async (): Promise<string> => {
+    const plan = typeof args.plan === 'string' ? JSON.parse(args.plan) : args.plan;
     const getp = () => {
       try { return JSON.parse(document.documentElement.getAttribute('probe') || 'null'); } catch { return null; }
     };
-    let p = args.plan.probe as { verdict?: string; results?: { url: string }[]; settled?: boolean } | null;
+    let p = plan.probe as { verdict?: string; results?: { url: string }[]; settled?: boolean } | null;
     if (p && p.verdict === 'consent') {
       const btns = document.querySelectorAll('#consent button, form[action*="consent"] button, div[role="dialog"] button');
       for (let bi = 0; bi < btns.length; bi++) {
@@ -153,8 +157,9 @@ export function consentFinalize(args: { top: number; plan: { probe: unknown } })
 }
 
 /** plan 的 urls 条数 */
-export function urlCount(args: { plan: { urls: string[] } }): number {
-  return args.plan.urls.length;
+export function urlCount(args: { plan: unknown }): number {
+  const plan = typeof args.plan === 'string' ? JSON.parse(args.plan) : args.plan;
+  return plan.urls.length;
 }
 
 /** targetId 直取(JSON 串形) */
@@ -168,7 +173,8 @@ export function homeTargetId(args: { r: { targetId?: string } }): string {
 }
 
 /** 目标签提取:readystatechange-complete 事件等待(帽 pageComplete)+ 渲染内容 */
-export function extractPage(args: { plan: { urls: string[] }; k: number }): string {
+export function extractPage(args: { plan: unknown; k: number }): string {
+  const plan = typeof args.plan === 'string' ? JSON.parse(args.plan) : args.plan;
   return (async (): Promise<string> => {
     await new Promise<void>((resolve) => {
       if (document.readyState === 'complete') return resolve();
@@ -179,25 +185,26 @@ export function extractPage(args: { plan: { urls: string[] }; k: number }): stri
       setTimeout(resolve, pageComplete);
     });
     return JSON.stringify({
-      url: args.plan.urls[args.k],
+      url: plan.urls[args.k],
       finalUrl: location.href,
       nav: /^https?:/.test(location.href) ? 'ok' : 'failed',
       title: document.title,
       ready: document.readyState,
-      text: String((document.body && document.body.innerText) || '').slice(0, TEXT_pageText),
-      html: document.documentElement.outerHTML.slice(0, TEXT_pageHtml),
+      text: String((document.body && document.body.innerText) || '').slice(0, pageText),
+      html: document.documentElement.outerHTML.slice(0, pageHtml),
     });
   })();
 }
 
 /** 收口:probe 面重读新鲜 attr(md/AI 补写早于访问完成)+ pages 合包 */
-export function assemble(args: { plan: { probe: unknown }; pages: string }): string {
+export function assemble(args: { plan: unknown; pages: string }): string {
+  const plan = typeof args.plan === 'string' ? JSON.parse(args.plan) : args.plan;
   const fresh = (() => {
     try { return JSON.parse(document.documentElement.getAttribute('probe') || 'null'); } catch { return null; }
   })();
   return JSON.stringify({
-    probe: fresh || args.plan.probe,
+    probe: fresh || plan.probe,
     pages: JSON.parse('[' + args.pages + ']'),
-    errors: args.plan.probe ? [] : [{ stage: 'probe', op: 'attr', message: 'probe attr 未现' }],
+    errors: plan.probe ? [] : [{ stage: 'probe', op: 'attr', message: 'probe attr 未现' }],
   });
 }
