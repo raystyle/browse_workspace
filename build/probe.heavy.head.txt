@@ -1,0 +1,12 @@
+// ==UserScript==
+// @name         google-search probe heavy
+// @match        *://www.google.com/search*
+// @run-at       document-idle
+// ==/UserScript==
+// 本文件是生成物(build/build.mts 产;源 build/probe.heavy.ts + build/contracts.ts),勿手改。
+// 两段式重段(REQ-041 P0 / gr01-R3):document-idle 注入,settle 信号(probe attr settled:true)触发后
+// 做 SERP md + AI overview md 富集,写回同一 attr;不判读不造假——骨架缺席即静默退出。
+// 零 GM 面:纯 DOM + 内嵌转换器,无 @grant/@connect。
+// ---- vendored mdream@2.0.1(官方 IIFE 发行形,WASM 内嵌 base64,MIT)----
+// 源:scripts/vendor/mdream.iife.js(exact 钉版 + .sha256 边车),本段与该件字节等,tests/check.ts 守卫。
+// 油猴世界执行不吃页面 CSP(用户裁定 con-06-add1);暴露 window.mdream(仅本世界)。

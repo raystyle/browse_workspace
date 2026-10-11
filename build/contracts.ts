@@ -1,6 +1,9 @@
-// contracts.ts — schema 面(zod);值面在 contracts.values.ts(产物零 zod)
-import { z } from "zod";
-export * from "./contracts.values.ts";
+// contracts.ts — google-search schema 面(zod);值面在 contracts.values.ts(产物零 zod)
+// ErrorRecord/PageRecord 公共件已抽 build/framework/schemas.ts(REQ-041 P0),此处转口消费。
+import { z } from 'zod';
+import { ErrorRecord, PageRecord } from './framework/schemas.ts';
+export * from './contracts.values.ts';
+export { ErrorRecord, PageRecord };
 
 // ---------- 结果与载荷 schema ----------
 export const Verdict = z.enum(['ok', 'consent', 'challenged', 'empty', 'nav-stall']);
@@ -39,24 +42,6 @@ export const ProbePayload = z.object({
   converter: z.string(),
   ai_overview: AiOverview,
   probe_debug: z.array(DbgEntry),
-});
-
-export const ErrorRecord = z.object({
-  stage: z.string(),
-  op: z.string(),
-  message: z.string(),
-});
-export type ErrorRecord = z.infer<typeof ErrorRecord>;
-
-export const PageRecord = z.object({
-  url: z.string(),
-  finalUrl: z.string().optional(),
-  nav: z.enum(['ok', 'failed', 'eval-failed', 'switch-failed']).optional(),
-  title: z.string().nullable().optional(),
-  ready: z.string().optional(),
-  text: z.string().optional(),
-  html: z.string().optional(),
-  error: z.string().optional(),
 });
 
 export const MechOutput = z.object({

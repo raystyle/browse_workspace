@@ -1,23 +1,32 @@
 "use strict";
 (() => {
-  // build/contracts.values.ts
-  var CHANNEL = {
+  // build/framework/values.ts
+  var CHANNEL_BASE = {
     probeAttr: "probe",
-    eventsPath: "/events",
-    slug: "google-search"
+    eventsPath: "/events"
   };
-  var CAPS = {
+  var BASE_CAPS = {
     docElementGuard: 3e3,
     settleAwait: 2e4,
     reloadSettleAwait: 15e3,
+    pageComplete: 12e3,
+    transientRetryMs: 1e3,
+    // 两段式(REQ-041 P0):heavy 段等 settled 信号帽 / 观察窗全程帽 / mdream 单次竞速帽
+    heavySettleAwait: 2e4,
+    heavyDeadline: 3e4,
+    mdRaceMs: 4e3
+  };
+
+  // build/contracts.values.ts
+  var CHANNEL = { ...CHANNEL_BASE, slug: "google-search" };
+  var CAPS = {
+    ...BASE_CAPS,
     consentReawait: 15e3,
     commitPollTick: 300,
     commitPollTries: 30,
     // 9s 提交探测
-    pageComplete: 12e3,
     aiStable: 1200,
-    aiDeadline: 1e4,
-    transientRetryMs: 1e3
+    aiDeadline: 1e4
   };
   var SELECTORS = {
     version: "2026-10-10.3",
@@ -28,7 +37,7 @@
   };
   var TEXT_CAPS = { snippet: 300, pageText: 12e3, pageHtml: 16e3, aiText: 4e3, mdPage: 24e3, mdHtmlIn: 5e5 };
 
-  // build/probe.main.ts
+  // build/probe.skeleton.ts
   var STARTED = Date.now();
   var lastMut = Date.now();
   var mo = null;
@@ -37,7 +46,7 @@
     DBG.push({ t: Date.now() - STARTED, ev: ev.slice(0, 60) });
     if (DBG.length > 24) DBG.shift();
   }
-  dbg("inject:readyState=" + document.readyState);
+  dbg("sk:inject:" + document.readyState);
   var PORT = (() => {
     const p = "%%BROWSE_PORT%%";
     return p.indexOf("%%") === 0 ? "9880" : p;
@@ -109,41 +118,6 @@
       dbg("report:throw");
     }
   }
-  function mdRace(p, ms) {
-    return Promise.race([Promise.resolve(p), new Promise((_, rej) => setTimeout(() => rej(new Error("mdream-timeout")), ms))]);
-  }
-  async function mdConvertOnce(html, opts) {
-    const w = window;
-    const fn = w.mdream && w.mdream.htmlToMarkdown;
-    if (!fn) return null;
-    const raw = await mdRace(fn.call(w.mdream, html, opts), 4e3);
-    if (typeof raw === "string") return raw;
-    if (raw && typeof raw === "object" && typeof raw.markdown === "string") return raw.markdown;
-    return null;
-  }
-  async function mdConvert(html, origin) {
-    const w = window;
-    if (!(w.mdream && typeof w.mdream.htmlToMarkdown === "function")) return { markdown: null, converter: "failed", debug: { err: "mdream-absent" } };
-    const chain = [
-      { shape: "minimal", opts: { minimal: true, origin: origin || location.origin } },
-      { shape: "clean", opts: { clean: true, origin: origin || location.origin } },
-      { shape: "plain", opts: {} }
-    ];
-    for (const c of chain) {
-      dbg("md:run:" + c.shape);
-      try {
-        const md = await mdConvertOnce(html, c.opts);
-        if (md && md !== "[object Object]") {
-          dbg("md:done:" + c.shape + ":len=" + md.length);
-          return { markdown: md, converter: "mdream@2.0.1/" + c.shape };
-        }
-      } catch (e) {
-        dbg("md:err:" + c.shape);
-        return { markdown: null, converter: /timeout/.test(String(e)) ? "failed(timeout)" : "failed", debug: { err: String(e).slice(0, 120) } };
-      }
-    }
-    return { markdown: null, converter: "failed", debug: { err: "all-shapes-empty" } };
-  }
   function aiBlock() {
     const labels = ["AI Overview", "AI \u6982\u89C8", "AI \u603B\u89C8"];
     for (const label of labels) {
@@ -165,33 +139,6 @@
   function aiPayload() {
     const b = aiBlock();
     return b ? { present: true, text: b.text } : { present: false, text: null };
-  }
-  function mergeAi(b) {
-    dbg("ai:stable:len=" + b.text.length);
-    try {
-      const cur = JSON.parse(document.documentElement.getAttribute(CHANNEL.probeAttr) || "null");
-      if (cur && cur.slug === CHANNEL.slug) {
-        cur.ai_overview = { present: true, text: b.text };
-        cur.probe_debug = DBG.slice();
-        document.documentElement.setAttribute(CHANNEL.probeAttr, JSON.stringify(cur));
-        void (async () => {
-          try {
-            const c = await mdConvert(b.container.outerHTML.slice(0, 2e5), location.origin);
-            const cur2 = JSON.parse(document.documentElement.getAttribute(CHANNEL.probeAttr) || "null");
-            if (cur2 && cur2.ai_overview && cur2.ai_overview.present) {
-              cur2.ai_overview.markdown = c.markdown;
-              cur2.ai_overview.converter = c.converter;
-              document.documentElement.setAttribute(CHANNEL.probeAttr, JSON.stringify(cur2));
-              dbg("ai:md-done");
-            }
-          } catch {
-            dbg("ai:md-err");
-          }
-        })();
-      }
-    } catch {
-      dbg("ai:merge-throw");
-    }
   }
   var aiWatch = null;
   function watchAi() {
@@ -242,28 +189,18 @@
     aiWatch.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
     checkAi();
   }
-  var mdKicked = false;
-  function enrichMd() {
-    if (mdKicked) return;
-    mdKicked = true;
-    dbg("md:kick");
-    void (async () => {
-      const out = await mdConvert(document.documentElement.outerHTML, location.origin);
-      try {
-        const cur = JSON.parse(document.documentElement.getAttribute(CHANNEL.probeAttr) || "null");
-        if (cur && cur.slug === CHANNEL.slug) {
-          cur.markdown = out.markdown;
-          cur.converter = out.converter;
-          if (out.debug) cur.md_debug = out.debug;
-          cur.md_ts = Date.now();
-          cur.probe_debug = DBG.slice();
-          document.documentElement.setAttribute(CHANNEL.probeAttr, JSON.stringify(cur));
-          dbg("md:merged");
-        }
-      } catch {
-        dbg("md:merge-throw");
+  function mergeAi(b) {
+    dbg("ai:stable:len=" + b.text.length);
+    try {
+      const cur = JSON.parse(document.documentElement.getAttribute(CHANNEL.probeAttr) || "null");
+      if (cur && cur.slug === CHANNEL.slug) {
+        cur.ai_overview = { present: true, text: b.text };
+        cur.probe_debug = DBG.slice();
+        document.documentElement.setAttribute(CHANNEL.probeAttr, JSON.stringify(cur));
       }
-    })();
+    } catch {
+      dbg("ai:merge-throw");
+    }
   }
   function collect(forceSettled) {
     const main = pickMain();
@@ -285,7 +222,7 @@
       ts: Date.now(),
       settled,
       markdown: null,
-      converter: verdict === "ok" ? "mdream-pending" : "skipped-" + verdict,
+      converter: verdict === "ok" ? "heavy-pending" : "skipped-" + verdict,
       ai_overview: aiPayload(),
       probe_debug: DBG.slice()
     };
@@ -300,7 +237,6 @@
         mo = null;
       }
       reportSettled(payload);
-      enrichMd();
       if (!payload.ai_overview.present) watchAi();
     }
   }

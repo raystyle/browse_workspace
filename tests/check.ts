@@ -21,34 +21,56 @@ t.eq('十二对在册', slugs, [
   'google-search', 'human-gate', 'link-table', 'next-page', 'policy-surface',
   'response-tap', 'scroll-until-end', 'spa-route',
 ]);
+// 两段式探针对(skeleton+heavy 双件)按存在性识别;单件对沿用 probe.user.js(REQ-041 P0)
+function probeFiles(slug: string): string[] {
+  const dir = join(PK, slug);
+  if (existsSync(join(dir, 'probe.skeleton.user.js'))) return ['probe.skeleton.user.js', 'probe.heavy.user.js'];
+  return ['probe.user.js'];
+}
 for (const slug of slugs) {
   const dir = join(PK, slug);
-  const probe = readFileSync(join(dir, 'probe.user.js'), 'utf8');
+  const probes = probeFiles(slug).map((f) => readFileSync(join(dir, f), 'utf8'));
   readFileSync(join(dir, 'mech.rn'), 'utf8'); // 成对才算,读得到即在
-  if (/GM_xmlhttpRequest/.test(probe)) {
-    t.ok(`${slug}: 用 GM 必带 @grant`, /@grant\s+GM_xmlhttpRequest/.test(probe));
-    t.ok(
-      `${slug}: 用 GM 必带 @connect 127.0.0.1 非 localhost`,
-      /@connect\s+127\.0\.0\.1/.test(probe) && !/@connect\s+localhost/.test(probe),
-    );
-  }
-  const opens = (probe.match(/\/\* @detect \*\//g) ?? []).length;
-  const closes = (probe.match(/\/\* @enddetect \*\//g) ?? []).length;
+  // detect 块以对为单位恰一(两段式下住在 skeleton;heavy 无)
+  const opens = probes.reduce((n, s) => n + (s.match(/\/\* @detect \*\//g) ?? []).length, 0);
+  const closes = probes.reduce((n, s) => n + (s.match(/\/\* @enddetect \*\//g) ?? []).length, 0);
   t.ok(`${slug}: detect 标记成对(各一)`, opens === 1 && closes === 1, `open=${opens} close=${closes}`);
-  const runAt = (probe.match(/@run-at\s+(\S+)/) ?? [])[1];
-  t.ok(`${slug}: @run-at 只认 start/idle`, runAt === 'document-start' || runAt === 'document-idle', String(runAt));
+  probes.forEach((probe, i) => {
+    const fname = probeFiles(slug)[i];
+    if (/GM_xmlhttpRequest/.test(probe)) {
+      t.ok(`${slug}/${fname}: 用 GM 必带 @grant`, /@grant\s+GM_xmlhttpRequest/.test(probe));
+      t.ok(
+        `${slug}/${fname}: 用 GM 必带 @connect 127.0.0.1 非 localhost`,
+        /@connect\s+127\.0\.0\.1/.test(probe) && !/@connect\s+localhost/.test(probe),
+      );
+    }
+    const runAt = (probe.match(/@run-at\s+(\S+)/) ?? [])[1];
+    t.ok(`${slug}/${fname}: @run-at 只认 start/idle`, runAt === 'document-start' || runAt === 'document-idle', String(runAt));
+  });
 }
 
-// ---------- ①b vendor 钉版守卫(google-search 内嵌 mdream) ----------
+// ---------- ①b vendor 钉版守卫(google-search 重段内嵌 mdream) ----------
 {
   const vendor = readFileSync(join(ROOT, 'scripts/vendor/mdream.iife.js'), 'utf8');
   const sidecar = readFileSync(join(ROOT, 'scripts/vendor/mdream.iife.js.sha256'), 'utf8').trim();
   const actual = createHash('sha256').update(vendor).digest('hex');
   t.ok('vendor: mdream sha256 边车对账', sidecar.startsWith(actual), `sidecar=${sidecar} actual=${actual}`);
   t.ok('vendor: LICENSE 注记在', existsSync(join(ROOT, 'scripts/vendor/LICENSE-mdream.txt')));
-  const gsProbe = readFileSync(join(PK, 'google-search/probe.user.js'), 'utf8');
-  t.ok('google-search: vendored mdream 字节等内嵌', gsProbe.includes(vendor));
+  const gsHeavy = readFileSync(join(PK, 'google-search/probe.heavy.user.js'), 'utf8');
+  t.ok('google-search: vendored mdream 字节等内嵌(heavy 段)', gsHeavy.includes(vendor));
   t.ok('google-search: mdream 暴露形在(window.mdream)', /window\.mdream\s*=/.test(vendor));
+}
+
+// ---------- ①b' 两段式守卫(R3 教训固化为门:skeleton 轻、重库只在 heavy) ----------
+{
+  const sk = readFileSync(join(PK, 'google-search/probe.skeleton.user.js'), 'utf8');
+  const hv = readFileSync(join(PK, 'google-search/probe.heavy.user.js'), 'utf8');
+  t.ok('google-search: skeleton 体积 ≤20KB(R3 门)', Buffer.byteLength(sk) <= 20 * 1024, `${Buffer.byteLength(sk)}B`);
+  t.ok('google-search: skeleton @run-at document-start(采样要早)', /@run-at\s+document-start/.test(sk));
+  t.ok('google-search: heavy @run-at document-idle(重库要晚)', /@run-at\s+document-idle/.test(hv));
+  t.ok('google-search: skeleton 零 mdream(重库禁入骨架)', !sk.includes('htmlToMarkdown'));
+  t.ok('google-search: heavy 零 GM 面(纯 DOM 富集)', !/GM_xmlhttpRequest/.test(hv));
+  t.ok('google-search: 旧单件 probe.user.js 已退役', !existsSync(join(PK, 'google-search/probe.user.js')));
 }
 
 // ---------- ①c 生成物在位轻检(真 lint = build:tsc 类型 + esbuild 语法;此处只验在位与守卫) ----------
@@ -56,14 +78,19 @@ for (const slug of slugs) {
   const gsMech = readFileSync(join(PK, 'google-search/mech.rn'), 'utf8');
   t.ok('google-search: mech 生成头在(勿手改)', gsMech.startsWith('// google-search 宿主编排(生成物'));
   t.ok('google-search: mech 模板键只用在册 vars', [...new Set([...gsMech.matchAll(/<%=\s*(\w+)\s*%>/g)].map((m) => m[1]))].join(',') === 'q,top');
-  const gsProbeGen = readFileSync(join(PK, 'google-search/probe.user.js'), 'utf8');
-  t.ok('google-search: probe 生成头在(勿手改)', gsProbeGen.includes('本文件是生成物(build/build.mts 产'));
+  t.ok('google-search: skeleton 生成头在(勿手改)', readFileSync(join(PK, 'google-search/probe.skeleton.user.js'), 'utf8').includes('本文件是生成物(build/build.mts 产'));
+  t.ok('google-search: heavy 生成头在(勿手改)', readFileSync(join(PK, 'google-search/probe.heavy.user.js'), 'utf8').includes('本文件是生成物(build/build.mts 产'));
 }
 
 // ---------- ② 九张 @detect 表(vm 喂 facts) ----------
 function detectFn(slug: string): (facts: Record<string, unknown>) => DetectHitT | null {
-  const src = readFileSync(join(PK, slug, 'probe.user.js'), 'utf8');
-  const m = src.match(/\/\* @detect \*\/([\s\S]*?)\/\* @enddetect \*\//);
+  // detect 块以对为单位恰一(① 已守),跨件找到所在文件再取块
+  let m: RegExpMatchArray | null = null;
+  for (const f of probeFiles(slug)) {
+    const src = readFileSync(join(PK, slug, f), 'utf8');
+    m = src.match(/\/\* @detect \*\/([\s\S]*?)\/\* @enddetect \*\//);
+    if (m) break;
+  }
   if (!m) throw new Error(slug + ' 无 detect 块');
   const ctx: Record<string, unknown> = {};
   vm.createContext(ctx);
@@ -225,4 +252,4 @@ function loadRuntime(sb: Record<string, unknown>): ProbeR {
 }
 
 await new Promise((r) => setTimeout(r, 30)); // 等异步 tap 断言
-process.exit(t.summary('check.ts', 95));
+process.exit(t.summary('check.ts', 140));

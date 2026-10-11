@@ -1,6 +1,6 @@
-// probe.main.ts — google-search probe 本体(TS 源,esbuild 出 IIFE 进 probe.user.js)
-// 运行环境:clean-chrome 油猴世界(GM_xmlhttpRequest 可用,不吃页面 CSP)。
-// 三要素:事件驱动(observer/指纹稳定)、原子错误(终态如实,converter 记失败形)、超时兜底(CAPS)。
+// probe.skeleton.ts — 骨架段(KB 级,document-start):指纹采样 + 收齐引擎 + attr 通道 + 事件上报。
+// 重库(mdream/重提取器)禁入本段(gr01-R3:331KB WASM 在 document-start 全量解析是注入面浪费)——
+// 归 heavy 段(probe.heavy.ts,settled 后按需初始化)。
 import { CAPS, CHANNEL, SELECTORS, TEXT_CAPS } from './contracts.values.ts';
 
 declare const GM_xmlhttpRequest: (o: Record<string, unknown>) => void;
@@ -13,9 +13,8 @@ function dbg(ev: string): void {
   DBG.push({ t: Date.now() - STARTED, ev: ev.slice(0, 60) });
   if (DBG.length > 24) DBG.shift();
 }
-dbg('inject:readyState=' + document.readyState);
+dbg('sk:inject:' + document.readyState);
 
-// %%BROWSE_PORT%% 由 browse userscript install 时替换(守 127.0.0.1 上报道)
 const PORT = (() => {
   const p = '%%BROWSE_PORT%%';
   return p.indexOf('%%') === 0 ? '9880' : p;
@@ -44,7 +43,6 @@ type Picked = { title: string; url: string; wrapped: 'goto' | null; snippet: str
 function push(out: Picked[], seen: Record<string, 1>, a: HTMLAnchorElement, h: Element, via: 'main' | 'fallback'): void {
   const href = unwrap(a.href || a.getAttribute('href') || '');
   if (!/^https?:\/\//i.test(href)) return;
-  // /goto?url= 是 SERP 结果包装(服务端跟跳),不是内链:放行并打标
   const wrapped: 'goto' | null = SELECTORS.gotoRe.test(href) ? 'goto' : null;
   if (!wrapped && SELECTORS.internalRe.test(href.replace(/^https?:\/\//i, ''))) return;
   if (seen[href]) return;
@@ -76,7 +74,6 @@ function pickFallback(): Picked[] {
   return out;
 }
 
-// 完成回调:报 daemon /events 一次(携完整 url 列表)
 function reportSettled(payload: { verdict: string; results: { url: string }[] }): void {
   dbg('report:events');
   try {
@@ -95,45 +92,7 @@ function reportSettled(payload: { verdict: string; results: { url: string }[] })
   }
 }
 
-// md 公共执行器:mdream IIFE 实测回 Promise 且 d.ts 声 string 不可信;竞速帽防挂死。
-// 降级链 minimal(isolateMain 对 SERP 常取空)-> clean -> plain。
-function mdRace<T>(p: T, ms: number): Promise<T> {
-  return Promise.race([Promise.resolve(p), new Promise<never>((_, rej) => setTimeout(() => rej(new Error('mdream-timeout')), ms))]);
-}
-async function mdConvertOnce(html: string, opts: Record<string, unknown>): Promise<string | null> {
-  const w = window as unknown as { mdream?: { htmlToMarkdown?: (h: string, o?: Record<string, unknown>) => Promise<string> | string } };
-  const fn = w.mdream && w.mdream.htmlToMarkdown;
-  if (!fn) return null;
-  const raw = await mdRace(fn.call(w.mdream, html, opts), 4000);
-  if (typeof raw === 'string') return raw;
-  if (raw && typeof raw === 'object' && typeof (raw as { markdown?: string }).markdown === 'string') return (raw as { markdown: string }).markdown;
-  return null;
-}
-async function mdConvert(html: string, origin?: string): Promise<{ markdown: string | null; converter: string; debug?: { err: string } }> {
-  const w = window as unknown as { mdream?: { htmlToMarkdown?: unknown } };
-  if (!(w.mdream && typeof w.mdream.htmlToMarkdown === 'function')) return { markdown: null, converter: 'failed', debug: { err: 'mdream-absent' } };
-  const chain: { shape: string; opts: Record<string, unknown> }[] = [
-    { shape: 'minimal', opts: { minimal: true, origin: origin || location.origin } },
-    { shape: 'clean', opts: { clean: true, origin: origin || location.origin } },
-    { shape: 'plain', opts: {} },
-  ];
-  for (const c of chain) {
-    dbg('md:run:' + c.shape);
-    try {
-      const md = await mdConvertOnce(html, c.opts);
-      if (md && md !== '[object Object]') {
-        dbg('md:done:' + c.shape + ':len=' + md.length);
-        return { markdown: md, converter: 'mdream@2.0.1/' + c.shape };
-      }
-    } catch (e) {
-      dbg('md:err:' + c.shape);
-      return { markdown: null, converter: /timeout/.test(String(e)) ? 'failed(timeout)' : 'failed', debug: { err: String(e).slice(0, 120) } };
-    }
-  }
-  return { markdown: null, converter: 'failed', debug: { err: 'all-shapes-empty' } };
-}
-
-// AI Overview 采集:流式晚到,事件道(变更重置待稳,两拍稳即收;deadline 帽)
+// AI Overview 文本面(轻 DOM;markdown 富集归 heavy 段)
 function aiBlock(): { container: Element; text: string } | null {
   const labels = ['AI Overview', 'AI 概览', 'AI 总览'];
   for (const label of labels) {
@@ -152,33 +111,6 @@ function aiBlock(): { container: Element; text: string } | null {
 function aiPayload(): { present: boolean; text: string | null } {
   const b = aiBlock();
   return b ? { present: true, text: b.text } : { present: false, text: null };
-}
-function mergeAi(b: { container: Element; text: string }): void {
-  dbg('ai:stable:len=' + b.text.length);
-  try {
-    const cur = JSON.parse(document.documentElement.getAttribute(CHANNEL.probeAttr) || 'null');
-    if (cur && cur.slug === CHANNEL.slug) {
-      cur.ai_overview = { present: true, text: b.text };
-      cur.probe_debug = DBG.slice();
-      document.documentElement.setAttribute(CHANNEL.probeAttr, JSON.stringify(cur));
-      void (async () => {
-        try {
-          const c = await mdConvert(b.container.outerHTML.slice(0, 200000), location.origin);
-          const cur2 = JSON.parse(document.documentElement.getAttribute(CHANNEL.probeAttr) || 'null');
-          if (cur2 && cur2.ai_overview && cur2.ai_overview.present) {
-            cur2.ai_overview.markdown = c.markdown;
-            cur2.ai_overview.converter = c.converter;
-            document.documentElement.setAttribute(CHANNEL.probeAttr, JSON.stringify(cur2));
-            dbg('ai:md-done');
-          }
-        } catch {
-          dbg('ai:md-err');
-        }
-      })();
-    }
-  } catch {
-    dbg('ai:merge-throw');
-  }
 }
 let aiWatch: MutationObserver | null = null;
 function watchAi(): void {
@@ -215,30 +147,18 @@ function watchAi(): void {
   aiWatch.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
   checkAi();
 }
-
-// SERP 摘要异步补写:settled 终写不等待 mdream,不卡收齐信号
-let mdKicked = false;
-function enrichMd(): void {
-  if (mdKicked) return;
-  mdKicked = true;
-  dbg('md:kick');
-  void (async () => {
-    const out = await mdConvert(document.documentElement.outerHTML, location.origin);
-    try {
-      const cur = JSON.parse(document.documentElement.getAttribute(CHANNEL.probeAttr) || 'null');
-      if (cur && cur.slug === CHANNEL.slug) {
-        cur.markdown = out.markdown;
-        cur.converter = out.converter;
-        if (out.debug) cur.md_debug = out.debug;
-        cur.md_ts = Date.now();
-        cur.probe_debug = DBG.slice();
-        document.documentElement.setAttribute(CHANNEL.probeAttr, JSON.stringify(cur));
-        dbg('md:merged');
-      }
-    } catch {
-      dbg('md:merge-throw');
+function mergeAi(b: { text: string }): void {
+  dbg('ai:stable:len=' + b.text.length);
+  try {
+    const cur = JSON.parse(document.documentElement.getAttribute(CHANNEL.probeAttr) || 'null');
+    if (cur && cur.slug === CHANNEL.slug) {
+      cur.ai_overview = { present: true, text: b.text };
+      cur.probe_debug = DBG.slice();
+      document.documentElement.setAttribute(CHANNEL.probeAttr, JSON.stringify(cur));
     }
-  })();
+  } catch {
+    dbg('ai:merge-throw');
+  }
 }
 
 function collect(forceSettled?: boolean): void {
@@ -261,7 +181,7 @@ function collect(forceSettled?: boolean): void {
     ts: Date.now(),
     settled,
     markdown: null,
-    converter: verdict === 'ok' ? 'mdream-pending' : 'skipped-' + verdict,
+    converter: verdict === 'ok' ? 'heavy-pending' : 'skipped-' + verdict,
     ai_overview: aiPayload(),
     probe_debug: DBG.slice(),
   };
@@ -273,15 +193,10 @@ function collect(forceSettled?: boolean): void {
   if (settled) {
     if (mo) { mo.disconnect(); mo = null; }
     reportSettled(payload);
-    enrichMd();
     if (!payload.ai_overview.present) watchAi();
   }
 }
 
-// 收集期(document-start 早注入;interval 驱动,变更只记时不排程——SERP 动画变更流
-// 会饿死去抖排程)。链接在页即出 attr;收齐 = 指纹稳定(两拍不变)或页面完成静默或 12s 帽。
-// boot 守卫:document-start 提交早于 <html> 现身时 documentElement 为 null,直接 observe 会炸
-// 整个 IIFE(轮8 全败根因);有界等 documentElement 到位再启动。
 let lastFp: string | null = null;
 let lastFpAt = 0;
 let finalized = false;
