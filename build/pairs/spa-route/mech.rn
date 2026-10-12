@@ -1,0 +1,10 @@
+// spa-route 宿主编排:导航后等下一次 see.spa-route 再读缓冲(采集对配合件)
+pub async fn main() {
+    let i = 0;
+    while i < 30 {
+        time::sleep(time::Duration::from_secs(1)).await;
+        i = i + 1;
+    }
+    let v = cdp::js(r#"return "route-window-done""#, #{}).await?;
+    Ok(v)
+}

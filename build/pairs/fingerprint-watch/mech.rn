@@ -1,0 +1,10 @@
+// fingerprint-watch 宿主编排:等 see.fingerprint-watch 摘要(观察 8 秒窗)
+pub async fn main() {
+    let i = 0;
+    while i < 12 {
+        time::sleep(time::Duration::from_secs(1)).await;
+        i = i + 1;
+    }
+    let v = cdp::js(r#"return "watch-window-done""#, #{}).await?;
+    Ok(v)
+}

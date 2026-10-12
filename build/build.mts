@@ -1,6 +1,7 @@
 // build.mts — pair SDK 生成器唯一入口(con-06 用户令:定好契约,编译生成 rn 与油猴脚本)
 // 用法:tsx build/build.mts [pair](pair 目录名,缺省 google-search;为第二对铺路,REQ-041 P0)
 // 产:page-skills/<pair>/{probe.skeleton.user.js, probe.heavy.user.js, mech.rn}
+//   + 九对遗产对(REQ-041 P1 件3):page-skills/<slug>/{probe.user.js, mech.rn},源 build/pairs/<slug>/
 // 源:build/{contracts,probe.skeleton,probe.heavy,mech.bodies}.ts + {probe.skeleton,probe.heavy}.head.txt + mech.template.rn
 // 门链:pnpm typecheck && pnpm build && pnpm check(tsc 即 lint,esbuild 即语法保证;手改产物会被本 build 覆盖)
 import { build as esbuild } from 'esbuild';
@@ -8,6 +9,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CAPS, TEXT_CAPS } from './contracts.values.ts';
+import { LEGACY_PAIRS, assembleLegacyProbe, legacyMech, type LegacyPair } from './pairs.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = join(ROOT, 'dist-build');
@@ -85,8 +87,21 @@ for (const [name, src] of Object.entries(bodies)) {
 if (/{{BODY:/.test(tpl)) throw new Error('模板有槽无体: ' + (tpl.match(/{{BODY:\w+}}/g) || []).join(','));
 writeFileSync(join(PKG, 'mech.rn'), tpl);
 
+// ---------- ⑤ 九对遗产对(REQ-041 P1 件3):head 逐字 + esbuild 体 → probe.user.js;mech.rn 逐字 ----------
+// pair 参数缺省 google-search 时也全量刷新九对(单一编译道,免逐对跑);指定 pair 时跳过(迭代隔离)
+const ONLY = process.argv[2] && process.argv[2] !== '' ? true : false;
+let nLegacy = 0;
+if (!ONLY) {
+  for (const slug of LEGACY_PAIRS) {
+    const probe = await assembleLegacyProbe(slug as LegacyPair, DIST);
+    writeFileSync(join(ROOT, 'page-skills', slug, 'probe.user.js'), probe);
+    writeFileSync(join(ROOT, 'page-skills', slug, 'mech.rn'), legacyMech(slug as LegacyPair));
+    nLegacy++;
+  }
+}
+
 console.log(
   'build[' + PAIR + ']: probe.skeleton.user.js(' + (headSk + bodySk).length + 'B) + probe.heavy.user.js(' +
     (headHv + vendor + bodyHv).length + 'B,内嵌 mdream ' + vendor.length + 'B) + mech.rn(' + tpl.length + 'B),' +
-    Object.keys(bodies).length + ' 体注入',
+    Object.keys(bodies).length + ' 体注入' + (nLegacy > 0 ? ' + 九对遗产 ' + nLegacy + ' 对(probe.user.js+mech.rn)' : ' (指定 pair,九对遗产跳过)'),
 );

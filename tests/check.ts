@@ -5,10 +5,13 @@ import { createHash } from 'node:crypto';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { Tally, DetectHit, SeeBody, type DetectHit as DetectHitT } from './lib.ts';
 import { ContentTiers } from '../build/framework/schemas.ts';
 import { MechOutput } from '../build/contracts.ts';
 import { digestText, extractHighlights } from '../build/framework/tiers.ts';
+import { LEGACY_PAIRS, assembleLegacyProbe, legacyMech } from '../build/pairs.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PK = join(ROOT, 'page-skills');
@@ -136,6 +139,27 @@ for (const slug of slugs) {
     errors: [{ stage: 'follow', op: 'budget', message: 'follow 导航预算熔断' }],
   });
   t.ok('MechOutput: verdict budget 外非法值拒', !MechOutput.safeParse({ probe: { ...probe, verdict: 'bogus' }, pages: [], errors: [] }).success);
+}
+
+// ---------- ①f 九对遗产对 SDK 编译道钉版守卫(REQ-041 P1 件3):产物在位 + 与编译道字节等 ----------
+{
+  const dist = mkdtempSync(join(tmpdir(), 'ws-check-'));
+  try {
+    t.eq('九对遗产在册与编译道同相', [...LEGACY_PAIRS].sort(), [
+      'challenge-stop', 'fingerprint-watch', 'human-gate', 'link-table', 'next-page',
+      'policy-surface', 'response-tap', 'scroll-until-end', 'spa-route',
+    ]);
+    for (const slug of LEGACY_PAIRS) {
+      const want = await assembleLegacyProbe(slug, dist);
+      const got = readFileSync(join(PK, slug, 'probe.user.js'), 'utf8');
+      t.ok(`${slug}: probe.user.js 与编译道字节等(钉版,手改会被 build 覆盖)`, got === want, `len got=${got.length} want=${want.length}`);
+      const mech = readFileSync(join(PK, slug, 'mech.rn'), 'utf8');
+      t.ok(`${slug}: mech.rn 与编译道源字节等(逐字拷贝钉版)`, mech === legacyMech(slug), `len got=${mech.length} want=${legacyMech(slug).length}`);
+    }
+    t.ok('policy-surface: 纯判定对 head 原样(空体出空串)', readFileSync(join(PK, 'policy-surface/probe.user.js'), 'utf8') === readFileSync(join(ROOT, 'build/pairs/policy-surface/probe.head.txt'), 'utf8'));
+  } finally {
+    rmSync(dist, { recursive: true, force: true });
+  }
 }
 
 // ---------- ② 九张 @detect 表(vm 喂 facts) ----------
@@ -308,4 +332,4 @@ function loadRuntime(sb: Record<string, unknown>): ProbeR {
 }
 
 await new Promise((r) => setTimeout(r, 30)); // 等异步 tap 断言
-process.exit(t.summary('check.ts', 161));
+process.exit(t.summary('check.ts', 181));

@@ -1,0 +1,12 @@
+// link-table 宿主编排:配合滚动/翻页驱动,停后导出去重链接清单。
+// 用法:browse rune page-skills/link-table/mech.rn [--timeout 300]
+pub async fn main() {
+    let i = 0;
+    while i < 120 {
+        let r = cdp::js(r#"window.scrollBy(0, Math.max(600, window.innerHeight * 0.9)); return 1"#, #{}).await?;
+        time::sleep(time::Duration::from_millis(700)).await;
+        i = i + 1;
+    }
+    let v = cdp::js(r#"return JSON.stringify(Object.keys((window.__browseLinks && window.__browseLinks.seen) || {}))"#, #{}).await?;
+    Ok(v)
+}

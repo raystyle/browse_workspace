@@ -1,0 +1,13 @@
+// ==UserScript==
+// @name         response-tap probe
+// @match        *://*/*
+// @connect      127.0.0.1
+// @grant        GM_xmlhttpRequest
+// @run-at       document-start
+// ==/UserScript==
+/* @detect */
+function browseDetect(facts) {
+  return null; // 采集型无判定腿(任何页都可挂)
+}
+/* @enddetect */
+

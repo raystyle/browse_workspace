@@ -1,0 +1,12 @@
+// response-tap 宿主编排:驱动(翻页/滚动由调用方或 next-page 对提供),
+// 结束时一次读走页面内存缓冲(rune 返回值即导出,不走事件环)。
+// 用法:browse rune page-skills/response-tap/mech.rn [--timeout 300]
+pub async fn main() {
+    let i = 0;
+    while i < 120 {
+        time::sleep(time::Duration::from_secs(1)).await;
+        i = i + 1;
+    }
+    let v = cdp::js(r#"return JSON.stringify((window.__browseTap && window.__browseTap.buf) || [])"#, #{}).await?;
+    Ok(v)
+}

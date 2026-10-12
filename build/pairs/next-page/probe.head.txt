@@ -1,0 +1,16 @@
+// ==UserScript==
+// @name         next-page probe
+// @match        *://*/*
+// @connect      127.0.0.1
+// @grant GM_xmlhttpRequest
+// @run-at       document-idle
+// ==/UserScript==
+/* @detect */
+function browseDetect(facts) {
+  if (facts.hasRelNext) {
+    return { slug: 'next-page', confidence: 'CONFIRMED' };
+  }
+  return null;
+}
+/* @enddetect */
+

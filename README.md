@@ -16,6 +16,7 @@ page-skills/
   google-search/         # 生成体系首对(REQ-041 P0):probe 拆两段(见下),源在 build/
 
 build/                   # 生成器与 TS 源(con-06 契约编译体系;framework/ 是 pair SDK 基)
+  pairs/<slug>/          # 九对遗产对的编译源(REQ-041 P1 件3):probe.head.txt(detect 住此)+ probe.body.ts + mech.rn
 scripts/vendor/          # 钉版第三方发行件(mdream:exact + sha256 边车 + LICENSE)
 
 domain-skills/
@@ -99,6 +100,13 @@ fingerprint-watch（指纹 API 调用观察）、policy-surface（策略与敏�
 服务：gm-bridge（GM 特权跨世界桥:CustomEvent RPC 取跨域/KV）、
 human-gate（人机同环:通知+菜单闸,零轮询放行）。
 研究：google-search（SERP 判读+目标页研究,生成体系首对、两段式探针）。
+
+九对遗产对（除 google-search 与 antibot-vendor/gm-bridge 外全部）已迁 SDK 编译道
+（REQ-041 P1 件3）：`page-skills/<slug>/probe.user.js` 与 `mech.rn` 是生成物
+（`pnpm build` 全量刷新；源 `build/pairs/<slug>/`，手改产物会被覆盖，
+tests/check.ts 逐对字节等钉版守卫）。`@detect` 块住 `probe.head.txt` 原样，
+判定面零变（九对 @detect 表回归全绿）。antibot-vendor/gm-bridge 两对暂留手写
+单件形态，迁道另批。
 
 ## 六向增强谱系(油猴之于 rn,2026-10-10)
 
