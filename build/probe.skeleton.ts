@@ -181,6 +181,7 @@ function collect(forceSettled?: boolean): void {
     ts: Date.now(),
     settled,
     markdown: null,
+    tiers: null,
     converter: verdict === 'ok' ? 'heavy-pending' : 'skipped-' + verdict,
     ai_overview: aiPayload(),
     probe_debug: DBG.slice(),

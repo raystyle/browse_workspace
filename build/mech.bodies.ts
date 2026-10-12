@@ -12,6 +12,7 @@ declare const pageComplete: string;
 declare const aiStable: string;
 declare const aiDeadline: string;
 declare const transientRetryMs: string;
+declare const tierSnippet: string;
 declare const snippet: string;
 declare const pageText: string;
 declare const pageHtml: string;
@@ -172,7 +173,7 @@ export function homeTargetId(args: { r: { targetId?: string } }): string {
   return JSON.stringify((args.r && args.r.targetId) || null);
 }
 
-/** 目标签提取:readystatechange-complete 事件等待(帽 pageComplete)+ 渲染内容 */
+/** 目标签提取:readystatechange-complete 事件等待(帽 pageComplete)+ 渲染内容 + 页级三档(P1 件1:snippet 档,未做 md 转换 highlights 空 main null 如实) */
 export function extractPage(args: { plan: unknown; k: number }): string {
   const plan = typeof args.plan === 'string' ? JSON.parse(args.plan) : args.plan;
   return (async (): Promise<string> => {
@@ -184,14 +185,16 @@ export function extractPage(args: { plan: unknown; k: number }): string {
       document.addEventListener('readystatechange', onr);
       setTimeout(resolve, pageComplete);
     });
+    const text = String((document.body && document.body.innerText) || '');
     return JSON.stringify({
       url: plan.urls[args.k],
       finalUrl: location.href,
       nav: /^https?:/.test(location.href) ? 'ok' : 'failed',
       title: document.title,
       ready: document.readyState,
-      text: String((document.body && document.body.innerText) || '').slice(0, pageText),
+      text: text.slice(0, pageText),
       html: document.documentElement.outerHTML.slice(0, pageHtml),
+      tiers: { snippet: text.replace(/\s+/g, ' ').trim().slice(0, Number(tierSnippet)), highlights: [], main: null },
     });
   })();
 }

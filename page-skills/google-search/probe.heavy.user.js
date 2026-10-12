@@ -4,8 +4,8 @@
 // @run-at       document-idle
 // ==/UserScript==
 // 本文件是生成物(build/build.mts 产;源 build/probe.heavy.ts + build/contracts.ts),勿手改。
-// 两段式重段(REQ-041 P0 / gr01-R3):document-idle 注入,settle 信号(probe attr settled:true)触发后
-// 做 SERP md + AI overview md 富集,写回同一 attr;不判读不造假——骨架缺席即静默退出。
+// 两段式重段(REQ-041 P0 / gr01-R3;P1 件1 三档):document-idle 注入,settle 信号(probe attr settled:true)触发后
+// 做 SERP md + AI overview md 富集成三档(snippet/highlights/main),写回同一 attr;不判读不造假——骨架缺席即静默退出。
 // 零 GM 面:纯 DOM + 内嵌转换器,无 @grant/@connect。
 // ---- vendored mdream@2.0.1(官方 IIFE 发行形,WASM 内嵌 base64,MIT)----
 // 源:scripts/vendor/mdream.iife.js(exact 钉版 + .sha256 边车),本段与该件字节等,tests/check.ts 守卫。
@@ -41,7 +41,39 @@
     aiStable: 1200,
     aiDeadline: 1e4
   };
-  var TEXT_CAPS = { snippet: 300, pageText: 12e3, pageHtml: 16e3, aiText: 4e3, mdPage: 24e3, mdHtmlIn: 5e5 };
+  var TEXT_CAPS = {
+    snippet: 300,
+    pageText: 12e3,
+    pageHtml: 16e3,
+    aiText: 4e3,
+    mdPage: 24e3,
+    mdHtmlIn: 5e5,
+    // 内容三档(REQ-041 P1 件1):snippet 档字数帽 / 要点单条长度帽 / 要点条数帽
+    tierSnippet: 500,
+    tierHighlight: 240,
+    tierHighlights: 8
+  };
+
+  // build/framework/tiers.ts
+  function digestText(s, cap) {
+    return String(s || "").replace(/\s+/g, " ").trim().slice(0, cap);
+  }
+  function extractHighlights(md, maxN, maxLen) {
+    const out = [];
+    for (const raw of String(md || "").split("\n")) {
+      if (out.length >= maxN) break;
+      const m = /^(?:#{1,6}\s+|[-*+]\s+|\d+[.)]\s+)(.+)$/.exec(raw.trim());
+      if (m) out.push(digestText(m[1], maxLen));
+    }
+    return out;
+  }
+  function buildTiers(md, caps) {
+    return {
+      snippet: digestText(md, caps.snippet),
+      highlights: extractHighlights(md, caps.highlights, caps.highlightLen),
+      main: md
+    };
+  }
 
   // build/probe.heavy.ts
   var STARTED = Date.now();
@@ -130,6 +162,9 @@
       patch("hv:md:merged:" + out.converter, (p) => {
         p.markdown = out.markdown;
         p.converter = out.converter;
+        if (out.markdown) {
+          p.tiers = buildTiers(out.markdown, { snippet: TEXT_CAPS.tierSnippet, highlightLen: TEXT_CAPS.tierHighlight, highlights: TEXT_CAPS.tierHighlights });
+        }
         if (out.debug) p.md_debug = out.debug;
         p.md_ts = Date.now();
       });
@@ -152,6 +187,9 @@
         if (p.ai_overview && p.ai_overview.present) {
           p.ai_overview.markdown = out.markdown;
           p.ai_overview.converter = out.converter;
+          if (out.markdown) {
+            p.ai_overview.tiers = buildTiers(out.markdown, { snippet: TEXT_CAPS.tierSnippet, highlightLen: TEXT_CAPS.tierHighlight, highlights: TEXT_CAPS.tierHighlights });
+          }
         }
       });
     })();

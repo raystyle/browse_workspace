@@ -26,4 +26,15 @@ export const SELECTORS = {
     /^(?:[a-z0-9-]+\.)*(?:google\.[a-z.]+|googleusercontent\.com|gstatic\.com|ggpht\.com|youtube\.[a-z.]+|blogger\.com|googleadservices\.com|doubleclick\.net)\//i,
 } as const;
 
-export const TEXT_CAPS = { snippet: 300, pageText: 12000, pageHtml: 16000, aiText: 4000, mdPage: 24000, mdHtmlIn: 500000 } as const;
+export const TEXT_CAPS = {
+  snippet: 300,
+  pageText: 12000,
+  pageHtml: 16000,
+  aiText: 4000,
+  mdPage: 24000,
+  mdHtmlIn: 500000,
+  // 内容三档(REQ-041 P1 件1):snippet 档字数帽 / 要点单条长度帽 / 要点条数帽
+  tierSnippet: 500,
+  tierHighlight: 240,
+  tierHighlights: 8,
+} as const;

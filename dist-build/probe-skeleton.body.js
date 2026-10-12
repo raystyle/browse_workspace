@@ -35,7 +35,18 @@
     gotoRe: /^https:\/\/www\.google\.com\/goto\?url=/,
     internalRe: /^(?:[a-z0-9-]+\.)*(?:google\.[a-z.]+|googleusercontent\.com|gstatic\.com|ggpht\.com|youtube\.[a-z.]+|blogger\.com|googleadservices\.com|doubleclick\.net)\//i
   };
-  var TEXT_CAPS = { snippet: 300, pageText: 12e3, pageHtml: 16e3, aiText: 4e3, mdPage: 24e3, mdHtmlIn: 5e5 };
+  var TEXT_CAPS = {
+    snippet: 300,
+    pageText: 12e3,
+    pageHtml: 16e3,
+    aiText: 4e3,
+    mdPage: 24e3,
+    mdHtmlIn: 5e5,
+    // 内容三档(REQ-041 P1 件1):snippet 档字数帽 / 要点单条长度帽 / 要点条数帽
+    tierSnippet: 500,
+    tierHighlight: 240,
+    tierHighlights: 8
+  };
 
   // build/probe.skeleton.ts
   var STARTED = Date.now();
@@ -222,6 +233,7 @@
       ts: Date.now(),
       settled,
       markdown: null,
+      tiers: null,
       converter: verdict === "ok" ? "heavy-pending" : "skipped-" + verdict,
       ai_overview: aiPayload(),
       probe_debug: DBG.slice()

@@ -182,14 +182,16 @@ function extractPage(args) {
       document.addEventListener("readystatechange", onr);
       setTimeout(resolve, 12e3);
     });
+    const text = String(document.body && document.body.innerText || "");
     return JSON.stringify({
       url: plan.urls[args.k],
       finalUrl: location.href,
       nav: /^https?:/.test(location.href) ? "ok" : "failed",
       title: document.title,
       ready: document.readyState,
-      text: String(document.body && document.body.innerText || "").slice(0, 12e3),
-      html: document.documentElement.outerHTML.slice(0, 16e3)
+      text: text.slice(0, 12e3),
+      html: document.documentElement.outerHTML.slice(0, 16e3),
+      tiers: { snippet: text.replace(/\s+/g, " ").trim().slice(0, Number(500)), highlights: [], main: null }
     });
   })();
 }

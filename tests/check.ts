@@ -6,6 +6,8 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { Tally, DetectHit, SeeBody, type DetectHit as DetectHitT } from './lib.ts';
+import { ContentTiers } from '../build/framework/schemas.ts';
+import { digestText, extractHighlights } from '../build/framework/tiers.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PK = join(ROOT, 'page-skills');
@@ -77,9 +79,29 @@ for (const slug of slugs) {
 {
   const gsMech = readFileSync(join(PK, 'google-search/mech.rn'), 'utf8');
   t.ok('google-search: mech 生成头在(勿手改)', gsMech.startsWith('// google-search 宿主编排(生成物'));
-  t.ok('google-search: mech 模板键只用在册 vars', [...new Set([...gsMech.matchAll(/<%=\s*(\w+)\s*%>/g)].map((m) => m[1]))].join(',') === 'q,top');
+  t.ok('google-search: mech 模板必填键只用在册 vars', [...new Set([...gsMech.matchAll(/<%=\s*(\w+)\s*%>/g)].map((m) => m[1]))].join(',') === 'q,top');
   t.ok('google-search: skeleton 生成头在(勿手改)', readFileSync(join(PK, 'google-search/probe.skeleton.user.js'), 'utf8').includes('本文件是生成物(build/build.mts 产'));
   t.ok('google-search: heavy 生成头在(勿手改)', readFileSync(join(PK, 'google-search/probe.heavy.user.js'), 'utf8').includes('本文件是生成物(build/build.mts 产'));
+}
+
+// ---------- ①d 内容三档契约面(REQ-041 P1 件1:zod ContentTiers + 纯函数基 + 产物携带) ----------
+{
+  const good = { snippet: 'a'.repeat(500), highlights: ['x'], main: '# t' };
+  t.parses('tiers: 500 字边界过', ContentTiers, good);
+  t.ok('tiers: snippet >500 拒', !ContentTiers.safeParse({ ...good, snippet: 'a'.repeat(501) }).success);
+  t.ok('tiers: main null 容(未做 md 转换如实形)', ContentTiers.safeParse({ snippet: 's', highlights: [], main: null }).success);
+  t.ok('tiers: highlights 非串数组拒', !ContentTiers.safeParse({ ...good, highlights: [1] }).success);
+  t.eq('digestText: 折叠空白+截帽', digestText('  a\n\n b   c  ', 3), 'a b');
+  t.eq('digestText: 空入空出', digestText(null as unknown as string, 5), '');
+  t.eq('extractHighlights: 只收结构线(标题/列表/有序)', extractHighlights('# T\n- a\nplain\n* b\n2) c', 10, 240), ['T', 'a', 'b', 'c']);
+  t.eq('extractHighlights: 条数帽', extractHighlights('- 1\n- 2\n- 3', 2, 240).length, 2);
+  t.eq('extractHighlights: 单条长度帽', extractHighlights('- ' + 'x'.repeat(300), 10, 240)[0].length, 240);
+  const sk = readFileSync(join(PK, 'google-search/probe.skeleton.user.js'), 'utf8');
+  t.ok('google-search: skeleton 首写 tiers 预置 null', sk.includes('tiers: null'));
+  const hv = readFileSync(join(PK, 'google-search/probe.heavy.user.js'), 'utf8');
+  t.ok('google-search: heavy 富集带三档计算(buildTiers 入体)', hv.includes('highlights') && hv.includes('tierSnippet'));
+  const gsMech = readFileSync(join(PK, 'google-search/mech.rn'), 'utf8');
+  t.ok('google-search: mech 出参页级 tiers(extractPage 体)', gsMech.includes('tiers: { snippet:'));
 }
 
 // ---------- ② 九张 @detect 表(vm 喂 facts) ----------
@@ -252,4 +274,4 @@ function loadRuntime(sb: Record<string, unknown>): ProbeR {
 }
 
 await new Promise((r) => setTimeout(r, 30)); // 等异步 tap 断言
-process.exit(t.summary('check.ts', 140));
+process.exit(t.summary('check.ts', 152));

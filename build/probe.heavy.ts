@@ -1,11 +1,13 @@
 // probe.heavy.ts — 重段本体(TS 源,esbuild 出 IIFE 进 probe.heavy.user.js,组装序:头+vendored mdream+体)
 // 运行环境:clean-chrome 油猴世界(document-idle;vendor IIFE 先于本体检,window.mdream 已在)。
-// 职责(REQ-041 P0 / gr01-R3):settled 信号触发后 SERP md + AI overview md 富集,写回同一 probe attr。
+// 职责(REQ-041 P0 / gr01-R3;P1 件1 三档):settled 信号触发后 SERP md + AI overview md 富集
+// 成三档 {snippet ≤500 字摘要, highlights 要点, main 全文 md},写回同一 probe attr。
 // 三要素:事件驱动(attr MutationObserver 等 settle/present,不轮询)、原子错误(converter 如实记
 // 失败形,不假绿)、超时兜底(heavySettleAwait/heavyDeadline/mdRaceMs 帽,contracts CAPS 唯一权威)。
 // 纪律:不判 verdict 不造假——skeleton 是唯一判读方;骨架缺席/未收齐即静默退出,attr 保持原样。
 import { CAPS, CHANNEL, TEXT_CAPS } from './contracts.values.ts';
 import type { SettleSignal } from './framework/values.ts';
+import { buildTiers } from './framework/tiers.ts';
 
 const STARTED = Date.now();
 const DBG: { t: number; ev: string }[] = [];
@@ -15,11 +17,15 @@ function dbg(ev: string): void {
 }
 dbg('hv:inject:' + document.readyState);
 
+// 内容三档形(REQ-041 P1 件1;值面构造走 framework/tiers.ts buildTiers)
+type Tiers = { snippet: string; highlights: string[]; main: string };
+
 // attr 面(skeleton 终写形 + heavy 富集字段)
 type Payload = SettleSignal & {
   markdown: string | null;
+  tiers: Tiers | null;
   converter: string;
-  ai_overview: { present: boolean; text: string | null; markdown?: string | null; converter?: string | null } | null;
+  ai_overview: { present: boolean; text: string | null; markdown?: string | null; converter?: string | null; tiers?: Tiers | null } | null;
   probe_debug?: { t: number; ev: string }[];
 };
 
@@ -108,6 +114,10 @@ function kickSerpMd(): void {
     patch('hv:md:merged:' + out.converter, (p) => {
       p.markdown = out.markdown;
       p.converter = out.converter;
+      // 三档富集(REQ-041 P1 件1):md 成功才有 tiers;失败形保持 null 如实
+      if (out.markdown) {
+        p.tiers = buildTiers(out.markdown, { snippet: TEXT_CAPS.tierSnippet, highlightLen: TEXT_CAPS.tierHighlight, highlights: TEXT_CAPS.tierHighlights });
+      }
       if (out.debug) (p as { md_debug?: { err: string } }).md_debug = out.debug;
       (p as { md_ts?: number }).md_ts = Date.now();
     });
@@ -124,7 +134,14 @@ function kickAiMd(): void {
   void (async () => {
     const out = await mdConvert(c.outerHTML.slice(0, TEXT_CAPS.mdHtmlIn), location.origin);
     patch('hv:ai:md:merged:' + out.converter, (p) => {
-      if (p.ai_overview && p.ai_overview.present) { p.ai_overview.markdown = out.markdown; p.ai_overview.converter = out.converter; }
+      if (p.ai_overview && p.ai_overview.present) {
+        p.ai_overview.markdown = out.markdown;
+        p.ai_overview.converter = out.converter;
+        // 三档富集(REQ-041 P1 件1):AI 块 md 同形(AI 分析块多列表结构,要点档常有实货)
+        if (out.markdown) {
+          p.ai_overview.tiers = buildTiers(out.markdown, { snippet: TEXT_CAPS.tierSnippet, highlightLen: TEXT_CAPS.tierHighlight, highlights: TEXT_CAPS.tierHighlights });
+        }
+      }
     });
   })();
 }

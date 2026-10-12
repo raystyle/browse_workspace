@@ -24,9 +24,9 @@ browse rune page-skills/google-search/mech.rn --vars q=rust language --vars top=
 | 段 | 件 | @run-at | 体积 | 职责 |
 | --- | --- | --- | --- | --- |
 | 骨架 | `probe.skeleton.user.js` | document-start | ~9.5KB(门 ≤20KB) | 指纹采样、收齐引擎(两拍稳定)、verdict 判读(唯一判读方)、`/events` 上报、AI Overview 文本面(watchAi) |
-| 重段 | `probe.heavy.user.js` | document-idle | ~330KB(内嵌 vendored mdream) | settled 信号触发后 SERP md + AI overview md 富集,写回同一 `probe` attr |
+| 重段 | `probe.heavy.user.js` | document-idle | ~330KB(内嵌 vendored mdream) | settled 信号触发后 SERP md + AI overview md 富集成三档(P1 件1),写回同一 `probe` attr |
 
-- 通道零变:两段写同一 `probe` attr;skeleton 终写(整包重建)后 heavy 才补富集字段(`markdown`/`converter`/`md_ts`/`ai_overview.markdown`),时序由「两腿都等 settled」保证:终写前富集会被整包重建抹掉(实测踩过:引擎晚批注入时首写即带 `ai_overview.present:true`)
+- 通道零变:两段写同一 `probe` attr;skeleton 终写(整包重建)后 heavy 才补富集字段(`markdown`/`tiers`/`converter`/`md_ts`/`ai_overview.markdown`/`ai_overview.tiers`),时序由「两腿都等 settled」保证:终写前富集会被整包重建抹掉(实测踩过:引擎晚批注入时首写即带 `ai_overview.present:true`)
 - 引擎晚批注入形态(clean-chrome `OnScripts`):脚本清单应答晚到时 start/idle 两桶同批注入(load 已完即注);heavy 对骨架缺席不弃,有界等 attr 首现(heavySettleAwait 帽)
 - heavy 零 GM 面(纯 DOM + 内嵌转换器);骨架缺席/未收齐即静默退出,attr 保持 `heavy-pending` 如实
 - `converter` 语义:`heavy-pending`(ok 且富集未落)后接 `mdream@2.0.1/minimal|clean|plain`(成功,降级链序)或 `failed*`(如实失败);非 ok verdict 恒 `skipped-<verdict>`,不富集不假绿
@@ -35,7 +35,7 @@ browse rune page-skills/google-search/mech.rn --vars q=rust language --vars top=
 
 1. **快取结果**:裸 Page.navigate 不等 SERP load 尾;probe(document-start 注入)以结果指纹稳定(≥500ms 不变)判收齐,attr 带 `settled:true` 并向 daemon `/events` 发一次回调(携完整 url 列表);mech 挂 attr 观察器,写入即走不计时轮询
 2. **cdp 开标签访问结果页**:空签批量建、逐签点火导航(加载并行)、轮签等 `readystatechange-complete` 事件取**渲染内容**(`finalUrl` 即 goto 包裹跟跳后的真址)、回原签统一关访问签
-3. SERP 摘要:heavy 段(油猴世界)vendored mdream 转 markdown(不吃页面 CSP,con-06-add1),settled 后异步补写,mdRace 竞速帽(4s/次)+ minimal、clean、plain 降级链
+3. SERP 摘要:heavy 段(油猴世界)vendored mdream 转 markdown(不吃页面 CSP,con-06-add1),settled 后异步补写,mdRace 竞速帽(4s/次)+ minimal、clean、plain 降级链;md 成功即升三档 `tiers`(REQ-041 P1 件1)
 4. **AI Overview 采集**:AI 分析块流式晚到;settled 后骨架挂 MutationObserver 事件道(变更重置待稳,文本两拍稳 ≥1.2s 即收,10s 帽),文本落 attr 后 heavy 补块级 mdream 摘要;收不到即 `present:false` 不假绿
 
 ## 返回 schema(单 JSON)
@@ -43,18 +43,21 @@ browse rune page-skills/google-search/mech.rn --vars q=rust language --vars top=
 ```json
 {
   "probe": {
-    "verdict": "ok|consent|challenged|empty",
+    "verdict": "ok|consent|challenged|empty|budget",
     "drift": "none|suspected",
     "mainHits": 8, "fallbackHits": 0, "settled": true,
     "results": [{ "title": "…", "url": "https://…", "wrapped": "goto|null", "snippet": "…", "via": "main|fallback" }],
-    "markdown": "SERP 摘要(mdream)", "converter": "mdream@2.0.1/minimal|heavy-pending|failed|…",
-    "ai_overview": { "present": true, "text": "AI 分析块(≤4K)", "markdown": "块级 mdream 摘要", "converter": "…" },
+    "markdown": "SERP 全文 md(mdream)", "converter": "mdream@2.0.1/minimal|heavy-pending|failed|…",
+    "tiers": { "snippet": "≤500 字摘要", "highlights": ["要点(md 结构线抽取,≤8 条)"], "main": "全文 md(=markdown)" },
+    "ai_overview": { "present": true, "text": "AI 分析块(≤4K)", "markdown": "块级 mdream 摘要", "converter": "…", "tiers": { "snippet": "…", "highlights": ["…"], "main": "…" } },
     "probe_debug": […时间线…], "v": "选择器版本", "url": "SERP 地址", "ts": 0
   },
-  "pages": [{ "url": "请求址(goto 包裹或直址)", "finalUrl": "跟跳后真址", "title": "…", "ready": "complete", "text": "渲染文本(≤12K)", "html": "渲染 HTML(≤16K)" }],
+  "pages": [{ "url": "请求址(goto 包裹或直址)", "finalUrl": "跟跳后真址", "title": "…", "ready": "complete", "text": "渲染文本(≤12K)", "html": "渲染 HTML(≤16K)", "tiers": { "snippet": "文本摘要(≤500 字)", "highlights": [], "main": null } }],
   "errors": []
 }
 ```
+
+三档语义(P1 件1):`snippet` ≤500 字摘要、`highlights` 要点(md 标题/列表结构线抽取,找不到如实空数组)、`main` 全文 md。probe 与 ai_overview 的 tiers 由 heavy settled 后富集(md 失败保持 null 如实);`pages[].tiers` 由 mech 提取体就地出(snippet 档来自渲染文本,未做 md 转换故 `main:null`、`highlights:[]`)。
 
 ## verdict 与稳定性语义
 
