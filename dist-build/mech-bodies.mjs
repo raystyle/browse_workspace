@@ -162,6 +162,32 @@ function urlCount(args) {
   const plan = typeof args.plan === "string" ? JSON.parse(args.plan) : args.plan;
   return plan.urls.length;
 }
+function budgetOver(args) {
+  const plan = typeof args.plan === "string" ? JSON.parse(args.plan) : args.plan;
+  return plan.urls.length > Number(5) ? 1 : 0;
+}
+function budgetReceipt(args) {
+  const plan = typeof args.plan === "string" ? JSON.parse(args.plan) : args.plan;
+  const p = plan.probe;
+  return JSON.stringify({
+    slug: "google-search",
+    v: "follow-budget",
+    verdict: "budget",
+    drift: "none",
+    mainHits: 0,
+    fallbackHits: 0,
+    results: p && p.results ? p.results : [],
+    url: p && p.url ? p.url : location.href,
+    title: p && p.title ? p.title : "",
+    ts: Date.now(),
+    settled: false,
+    markdown: null,
+    tiers: null,
+    converter: "budget",
+    ai_overview: { present: false, text: null },
+    probe_debug: []
+  });
+}
 function targetIdOf(args) {
   return JSON.stringify(args.r.targetId);
 }
@@ -195,6 +221,45 @@ function extractPage(args) {
     });
   })();
 }
+function extractPageStable(args) {
+  const plan = typeof args.plan === "string" ? JSON.parse(args.plan) : args.plan;
+  return (async () => {
+    const sig = () => {
+      try {
+        return String(document.body && document.body.innerText || "").length + ":" + String(document.title || "").length + ":" + location.href;
+      } catch {
+        return "eval-err";
+      }
+    };
+    const deadline = Date.now() + 15e3;
+    let prev = null;
+    let beats = 0;
+    let stable = false;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 800));
+      beats++;
+      const cur = sig();
+      if (cur !== "eval-err" && cur === prev) {
+        stable = true;
+        break;
+      }
+      prev = cur;
+    }
+    const text = String(document.body && document.body.innerText || "");
+    return JSON.stringify({
+      url: plan.urls[args.k],
+      finalUrl: location.href,
+      nav: /^https?:/.test(location.href) ? "ok" : "failed",
+      title: document.title,
+      ready: document.readyState,
+      stable,
+      beats,
+      text: text.slice(0, 12e3),
+      html: document.documentElement.outerHTML.slice(0, 16e3),
+      tiers: { snippet: text.replace(/\s+/g, " ").trim().slice(0, Number(500)), highlights: [], main: null }
+    });
+  })();
+}
 function assemble(args) {
   const plan = typeof args.plan === "string" ? JSON.parse(args.plan) : args.plan;
   const fresh = (() => {
@@ -212,9 +277,12 @@ function assemble(args) {
 }
 export {
   assemble,
+  budgetOver,
+  budgetReceipt,
   buildUrl,
   consentFinalize,
   extractPage,
+  extractPageStable,
   homeTargetId,
   isSorry,
   navParams,

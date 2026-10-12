@@ -12,6 +12,9 @@ declare const pageComplete: string;
 declare const aiStable: string;
 declare const aiDeadline: string;
 declare const transientRetryMs: string;
+declare const followBeat: string;
+declare const followDeadline: string;
+declare const followBudget: string;
 declare const tierSnippet: string;
 declare const snippet: string;
 declare const pageText: string;
@@ -163,6 +166,37 @@ export function urlCount(args: { plan: unknown }): number {
   return plan.urls.length;
 }
 
+/** follow 导航预算闸(REQ-041 P1 件2):urls 条数超预算(1 SERP+≤followBudget goto)返 1,mech 据此原子回执 */
+export function budgetOver(args: { plan: unknown }): 0 | 1 {
+  const plan = typeof args.plan === 'string' ? JSON.parse(args.plan) : args.plan;
+  return plan.urls.length > Number(followBudget) ? 1 : 0;
+}
+
+/** follow 预算熔断回执(P1 件2):SERP 已收面保全进 probe 形,verdict=budget 不假绿。
+ * 全 ProbePayload 形(MechOutput zod 可验;SERP results 原样保全,富集面 budget 形如实置空)。 */
+export function budgetReceipt(args: { plan: unknown }): string {
+  const plan = typeof args.plan === 'string' ? JSON.parse(args.plan) : args.plan;
+  const p = plan.probe as { url?: string; title?: string; results?: unknown[] } | null;
+  return JSON.stringify({
+    slug: 'google-search',
+    v: 'follow-budget',
+    verdict: 'budget',
+    drift: 'none',
+    mainHits: 0,
+    fallbackHits: 0,
+    results: p && p.results ? p.results : [],
+    url: p && p.url ? p.url : location.href,
+    title: p && p.title ? p.title : '',
+    ts: Date.now(),
+    settled: false,
+    markdown: null,
+    tiers: null,
+    converter: 'budget',
+    ai_overview: { present: false, text: null },
+    probe_debug: [],
+  });
+}
+
 /** targetId 直取(JSON 串形) */
 export function targetIdOf(args: { r: { targetId?: string } }): string {
   return JSON.stringify(args.r.targetId);
@@ -192,6 +226,48 @@ export function extractPage(args: { plan: unknown; k: number }): string {
       nav: /^https?:/.test(location.href) ? 'ok' : 'failed',
       title: document.title,
       ready: document.readyState,
+      text: text.slice(0, pageText),
+      html: document.documentElement.outerHTML.slice(0, pageHtml),
+      tiers: { snippet: text.replace(/\s+/g, ' ').trim().slice(0, Number(tierSnippet)), highlights: [], main: null },
+    });
+  })();
+}
+
+/** follow 段提取(REQ-041 P1 件2):结果页内容两拍稳——连续两次读值相同才收。
+ * 三要素自查:事件源=beat 计时采样读内容签名(innerText 长+title 长+href;页面内容变化无 DOM
+ * 事件可等,与前段 SERP 指纹稳引擎同族的采样判据),连续两拍同值即收;帽=followDeadline 硬帽,
+ * readystate complete 只进出参证据(ready 字段)不提前收;原子错=签名读值 try/catch 包裹,
+ * eval 级错由 mech 重试道兜,超帽仍带已渲染内容出参(stable:false 如实)。 */
+export function extractPageStable(args: { plan: unknown; k: number }): string {
+  const plan = typeof args.plan === 'string' ? JSON.parse(args.plan) : args.plan;
+  return (async (): Promise<string> => {
+    const sig = (): string => {
+      try {
+        return String((document.body && document.body.innerText) || '').length + ':' + String(document.title || '').length + ':' + location.href;
+      } catch {
+        return 'eval-err';
+      }
+    };
+    const deadline = Date.now() + followDeadline;
+    let prev: string | null = null;
+    let beats = 0;
+    let stable = false;
+    while (Date.now() < deadline) {
+      await new Promise<void>((r) => setTimeout(r, followBeat));
+      beats++;
+      const cur = sig();
+      if (cur !== 'eval-err' && cur === prev) { stable = true; break; }
+      prev = cur;
+    }
+    const text = String((document.body && document.body.innerText) || '');
+    return JSON.stringify({
+      url: plan.urls[args.k],
+      finalUrl: location.href,
+      nav: /^https?:/.test(location.href) ? 'ok' : 'failed',
+      title: document.title,
+      ready: document.readyState,
+      stable,
+      beats,
       text: text.slice(0, pageText),
       html: document.documentElement.outerHTML.slice(0, pageHtml),
       tiers: { snippet: text.replace(/\s+/g, ' ').trim().slice(0, Number(tierSnippet)), highlights: [], main: null },

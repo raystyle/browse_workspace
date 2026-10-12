@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { Tally, DetectHit, SeeBody, type DetectHit as DetectHitT } from './lib.ts';
 import { ContentTiers } from '../build/framework/schemas.ts';
+import { MechOutput } from '../build/contracts.ts';
 import { digestText, extractHighlights } from '../build/framework/tiers.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -102,6 +103,39 @@ for (const slug of slugs) {
   t.ok('google-search: heavy 富集带三档计算(buildTiers 入体)', hv.includes('highlights') && hv.includes('tierSnippet'));
   const gsMech = readFileSync(join(PK, 'google-search/mech.rn'), 'utf8');
   t.ok('google-search: mech 出参页级 tiers(extractPage 体)', gsMech.includes('tiers: { snippet:'));
+}
+
+// ---------- ①e mode 两档与 follow 预算(REQ-041 P1 件2) ----------
+{
+  const gsMech = readFileSync(join(PK, 'google-search/mech.rn'), 'utf8');
+  t.ok('google-search: mode 缺省槽在(serp 缺省,老调用零回归)', gsMech.includes(`"<%= mode | default('serp') %>"`));
+  t.ok('google-search: follow 两拍稳体在(extractPageStable 入 mech)', gsMech.includes('function extractPageStable(args)') && gsMech.includes('"extractPageStable"'));
+  t.ok('google-search: serp 提取体仍在(extractPage 双道保留)', gsMech.includes('function extractPage(args)'));
+  t.ok('google-search: 预算闸与熔断回执体在(budgetOver/budgetReceipt)', gsMech.includes('function budgetOver(args)') && gsMech.includes('function budgetReceipt(args)'));
+  t.ok('google-search: budget verdict 契约面(回执体带 verdict budget)', gsMech.includes('verdict: "budget"'));
+  // 预算数值与契约同源:CAPS.followBudget 经 define 内联进 mech,与 contracts.values 源一致
+  const cv = readFileSync(join(ROOT, 'build/contracts.values.ts'), 'utf8');
+  const fb = (cv.match(/followBudget:\s*(\d+)/) ?? [])[1];
+  t.ok('google-search: follow 预算数值 mech/契约同源', !!fb && gsMech.includes('Number(' + fb + ')'), `followBudget=${String(fb)}`);
+  // 出参契约:serp 形(带 follow 页记录)与 budget 熔断回执形都过 MechOutput
+  const probe = {
+    slug: 'google-search', v: 'x', verdict: 'ok', drift: 'none', mainHits: 1, fallbackHits: 0,
+    results: [{ title: 't', url: 'https://e/x', wrapped: null, snippet: 's', via: 'main' }],
+    url: 'https://www.google.com/search?q=x', title: 'x', ts: 1, settled: true,
+    markdown: 'm', tiers: { snippet: 's', highlights: [], main: 'm' }, converter: 'mdream@2.0.1/minimal',
+    ai_overview: { present: false, text: null }, probe_debug: [],
+  };
+  t.parses('MechOutput: serp 形 + follow 页记录(stable/beats/tiers)', MechOutput, {
+    probe,
+    pages: [{ url: 'https://e/x', finalUrl: 'https://e/x', nav: 'ok', title: 'x', ready: 'complete', stable: true, beats: 4, text: 't', html: '<h1>t</h1>', tiers: { snippet: 's', highlights: [], main: null } }],
+    errors: [],
+  });
+  t.parses('MechOutput: budget 熔断回执形(原子不假绿)', MechOutput, {
+    probe: { ...probe, verdict: 'budget', settled: false, markdown: null, tiers: null, converter: 'budget', results: [] },
+    pages: [],
+    errors: [{ stage: 'follow', op: 'budget', message: 'follow 导航预算熔断' }],
+  });
+  t.ok('MechOutput: verdict budget 外非法值拒', !MechOutput.safeParse({ probe: { ...probe, verdict: 'bogus' }, pages: [], errors: [] }).success);
 }
 
 // ---------- ② 九张 @detect 表(vm 喂 facts) ----------
@@ -274,4 +308,4 @@ function loadRuntime(sb: Record<string, unknown>): ProbeR {
 }
 
 await new Promise((r) => setTimeout(r, 30)); // 等异步 tap 断言
-process.exit(t.summary('check.ts', 152));
+process.exit(t.summary('check.ts', 161));

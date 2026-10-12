@@ -1,12 +1,15 @@
 // google-search 宿主编排(生成物:build/build.mts 渲染;源 build/mech.bodies.ts + build/contracts.ts,勿手改)
 // 快取 SERP 结果(指纹收齐事件驱动)+ cdp 开标签并行访问结果页取渲染内容,单 JSON 返回。
-// 用法:browse rune page-skills/google-search/mech.rn --vars q=<查询词> --vars top=5
-// 三要素:事件驱动(settled attr 观察/readystatechange/回调即走)、原子错误(失败面单 JSON 证据面,
+// 用法:browse rune page-skills/google-search/mech.rn --vars q=<查询词> --vars top=5 [--vars mode=serp|follow]
+// mode(P1 件2):serp=现行为(缺省);follow=跟进访问结果页,内容两拍稳提取+导航预算(1 SERP+≤5 goto,超限 verdict=budget)。
+// 三要素:事件驱动(settled attr 观察/readystatechange/两拍稳采样/回调即走)、原子错误(失败面单 JSON 证据面,
 // 已收数据永不因后续段失败而丢)、超时兜底(全等待段帽,见 build/contracts.ts CAPS)。
 // 容错自愈:开机会话愈(跨轮死会话 newTab 重建)、probe 未现刷新愈一轮、瞬态错重试、单页错落记录。
 pub async fn main() {
     let q = "<%= q %>";
     let top = <%= top %>;
+    // 模式道(REQ-041 P1 件2):serp=现行为零回归(缺省);follow=跟进访问结果页,内容两拍稳+导航预算
+    let mode = "<%= mode | default('serp') %>";
     let errors = "";
     fn adderr(errors, stage, op, message) {
         let m = message.replace("\r", " ").replace("\n", " ").replace("\\", "\\\\").replace("\"", "\\\"");
@@ -148,6 +151,23 @@ return urlCount(args);"#, #{"plan" : plan}).await {
         Ok(v) => v,
         Err(e) => { return Ok(fail1(errors, "tabs", "js", e.message)); }
     };
+    // follow 预算闸(P1 件2):1 SERP+≤5 goto 跳是硬导航帽,超限 verdict=budget 原子回执
+    // (SERP 已收面保全进回执,不静默截断不假绿;serp 模式无此帽,现行为零回归)
+    if mode == "follow" {
+        let over = match cdp::js(r#"{{BODY:budgetOver}}
+return budgetOver(args);"#, #{"plan" : plan}).await {
+            Ok(v) => v,
+            Err(_) => 0,
+        };
+        if over == 1 {
+            let bp = match cdp::js(r#"{{BODY:budgetReceipt}}
+return budgetReceipt(args);"#, #{"plan" : plan}).await {
+                Ok(v) => v,
+                Err(_) => "{\"slug\":\"google-search\",\"verdict\":\"budget\",\"settled\":false,\"results\":[],\"url\":\"\",\"title\":\"\"}",
+            };
+            return Ok("{\"probe\":" + bp + ",\"pages\":[],\"errors\":[" + adderr(errors, "follow", "budget", "follow 导航预算熔断:结果页条数超 CAPS.followBudget 预算(1 SERP+≤5 goto 跳);top 收敛到预算内重跑") + "]}");
+        }
+    }
     // 空签批量建 + 逐签点火导航(加载并行);点火失败留提取段落 nav:failed
     let ids = Vec::new();
     let k = 0;
@@ -169,20 +189,26 @@ return tabNavParams(args);"#, #{"plan" : plan, "k" : k}).await {
         let _navr = cdp::raw("Page.navigate", navj).await;
         k = k + 1;
     }
-    // 轮签取内容:switchTab(参数 rune 侧直拼,免疫死会话)→ complete 事件 → 渲染内容
+    // 轮签取内容:switchTab(参数 rune 侧直拼,免疫死会话)→ 模式选提取体 → 渲染内容。
+    // serp=extractPage(complete 事件等待,现行为);follow=extractPageStable(内容两拍稳,P1 件2)。
+    // 提取体走同一条重试梯(bsrc 源 + fname 入口),差异全在体内,模板不分叉。
+    let bsrc = r#"{{BODY:extractPage}}"#;
+    let fname = "extractPage";
+    if mode == "follow" {
+        bsrc = r#"{{BODY:extractPageStable}}"#;
+        fname = "extractPageStable";
+    }
     let pages = "";
     let e2 = 0;
     while e2 < n {
         let sw_failed = 0;
         let _swr = cdp::dialect("switchTab", "[" + ids[e2] + "]").await;
-        let content = match cdp::js(r#"{{BODY:extractPage}}
-return extractPage(args);"#, #{"plan" : plan, "k" : e2}).await {
+        let content = match cdp::js(bsrc + "\nreturn " + fname + "(args);", #{"plan" : plan, "k" : e2}).await {
             Ok(v) => v,
             Err(er) => {
                 // 导航竞态(goto 包裹 302 链)重试一道
                 time::sleep(time::Duration::from_millis(800)).await;
-                match cdp::js(r#"{{BODY:extractPage}}
-return extractPage(args);"#, #{"plan" : plan, "k" : e2}).await {
+                match cdp::js(bsrc + "\nreturn " + fname + "(args);", #{"plan" : plan, "k" : e2}).await {
                     Ok(v2) => v2,
                     Err(er2) => "{\"url\":\"eval-failed\",\"nav\":\"eval-failed\",\"error\":\"" + er2.message.replace("\r", " ").replace("\n", " ").replace("\\", "\\\\").replace("\"", "\\\"") + "\"}"
                 }

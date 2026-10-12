@@ -14,6 +14,10 @@ export const CAPS = {
   commitPollTries: 30, // 9s 提交探测
   aiStable: 1200,
   aiDeadline: 10000,
+  // follow 模式(REQ-041 P1 件2):两拍稳节拍 / 结果页内容等待硬帽 / 导航预算(1 SERP+≤N goto 跳)
+  followBeat: 800,
+  followDeadline: 15000,
+  followBudget: 5,
 } as const;
 
 // ---------- 判读常量(选择器版本与内外链规则) ----------

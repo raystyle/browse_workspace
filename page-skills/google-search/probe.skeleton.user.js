@@ -44,7 +44,11 @@ function browseDetect(facts) {
     commitPollTries: 30,
     // 9s 提交探测
     aiStable: 1200,
-    aiDeadline: 1e4
+    aiDeadline: 1e4,
+    // follow 模式(REQ-041 P1 件2):两拍稳节拍 / 结果页内容等待硬帽 / 导航预算(1 SERP+≤N goto 跳)
+    followBeat: 800,
+    followDeadline: 15e3,
+    followBudget: 5
   };
   var SELECTORS = {
     version: "2026-10-10.3",

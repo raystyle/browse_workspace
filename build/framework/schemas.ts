@@ -24,8 +24,12 @@ export const PageRecord = z.object({
   nav: z.enum(['ok', 'failed', 'eval-failed', 'switch-failed']).optional(),
   title: z.string().nullable().optional(),
   ready: z.string().optional(),
+  // follow 模式两拍稳证据(REQ-041 P1 件2):stable=连续两拍同值才收;beats=实拍数
+  stable: z.boolean().optional(),
+  beats: z.number().optional(),
   text: z.string().optional(),
   html: z.string().optional(),
+  tiers: ContentTiers.nullable().optional(),
   error: z.string().optional(),
 });
 export type PageRecord = z.infer<typeof PageRecord>;

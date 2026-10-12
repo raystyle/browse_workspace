@@ -9,13 +9,17 @@ Google SERP 判读与目标页研究对(REQ-035 双脚本对形;REQ-041 P0 两�
 ```bash
 browse userscript install page-skills/google-search/probe.skeleton.user.js page-skills/google-search/probe.heavy.user.js --restart
 browse rune page-skills/google-search/mech.rn --vars q=rust language --vars top=5 > research.json
+browse rune page-skills/google-search/mech.rn --vars q=rust language --vars top=5 --vars mode=follow --timeout 180 > follow.json
 ```
 
 - 双件一道装机(多文件 install);骨架沿用旧单件 `@name`,装机即原位替换旧 `probe.user.js`,heavy 是新增条目
 - `q`:查询词(URL 编码由 mech 页面侧 encodeURIComponent 处理)
 - `top`:跟进访问的目标页条数(1-10;SERP 判读自身恒取前 10,请求恒 num=10,num<10 实测缩自然结果)
-- 两个 vars 都必填,缺即 exit 2(模板键网络前拦)
-- 实测时耗:温机约 8s(top=5:快取 URL ~1s + 标签并行加载 + 轮签提取)
+- `mode`(REQ-041 P1 件2,可选,缺省 `serp`):
+  - `serp`=现行为零回归(complete 事件等待提取);
+  - `follow`=跟进访问结果页,提取改**内容两拍稳**(连续两拍读值同才收;readystate complete 只当帽不当判据,SPA complete 后晚到内容照收,CAPS.followBeat/followDeadline),配**导航预算** 1 SERP+≤5 goto 跳(CAPS.followBudget),`top` 超预算即 `verdict=budget` 原子回执(SERP results 保全,不静默截断不假绿)
+- 两个 vars(`q`/`top`)必填,缺即 exit 2(模板键网络前拦);`mode` 缺省 serp 不必填
+- 实测时耗:温机约 8s(top=5:快取 URL ~1s + 标签并行加载 + 轮签提取);follow 模式标签并行加载但轮签串行,建议 `--timeout 180`
 
 ## 探针两段式(REQ-041 P0 / gr01-R3)
 
@@ -61,7 +65,7 @@ browse rune page-skills/google-search/mech.rn --vars q=rust language --vars top=
 
 ## verdict 与稳定性语义
 
-- **挑战终态即证据**:`verdict=challenged`(probe 见 turnstile/captcha/sorry)或 `consent`(同意墙,mech 合成点击接受后重读,仍卡即保持)如实回执,**不设 HTTP 抓 google 兜底、不假绿**
+- **挑战终态即证据**:`verdict=challenged`(probe 见 turnstile/captcha/sorry)或 `consent`(同意墙,mech 合成点击接受后重读,仍卡即保持)如实回执,**不设 HTTP 抓 google 兜底、不假绿**;follow 模式另有 `verdict=budget`(导航预算熔断,REQ-041 P1 件2,同原子回执道)
 - **goto 包裹(2026-10 新 SERP 形)**:结果锚 href 是 `google.com/goto?url=<opaque>` 服务端跟跳包装,结果记 `wrapped:"goto"`;真址由标签访问落定(`pages[].finalUrl`)。经典 `/url?q=` 形就地解包
 - **漂移检测**:主道(`#search/#rso` h3 锚)零命中而兜底道(外链锚含 h3 启发式)命中即 `drift=suspected`;选择器版本在 `probe.v`,连续 2 次 suspected 即该升选择器
 - **mdream 失败不假绿**:`converter=failed*`,`markdown=null`

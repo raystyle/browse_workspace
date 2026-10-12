@@ -6,7 +6,8 @@ export * from './contracts.values.ts';
 export { ContentTiers, ErrorRecord, PageRecord };
 
 // ---------- 结果与载荷 schema ----------
-export const Verdict = z.enum(['ok', 'consent', 'challenged', 'empty', 'nav-stall']);
+// budget = follow 模式导航预算熔断(REQ-041 P1 件2;原子回执不假绿)
+export const Verdict = z.enum(['ok', 'consent', 'challenged', 'empty', 'nav-stall', 'budget']);
 export const Drift = z.enum(['none', 'suspected']);
 
 export const SearchResult = z.object({
