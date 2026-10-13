@@ -36,12 +36,23 @@ google-search 是两段式:`probe.skeleton.user.js`(document-start) + `probe.hea
 - 观察:`POST /events`;停止:`POST /userscript/stop`;端口 `%%BROWSE_PORT%%`,未替换则 9880
 - 大结果留页面内存,mech 用 `cdp::js` 读走
 
-## 对册
+## 技能
 
-爬虫:response-tap、scroll-until-end、next-page、spa-route、link-table。
-安全:challenge-stop、antibot-vendor、fingerprint-watch、policy-surface。
-服务:gm-bridge、human-gate。
-研究:google-search、x-search。
+| 名称 | 说明 |
+| --- | --- |
+| antibot-vendor | 识别反爬产品 |
+| challenge-stop | 挑战页出现时停止编排 |
+| fingerprint-watch | 观察 canvas、audio、字体、webdriver 调用 |
+| gm-bridge | 经 DOM 事件向其他世界提供 `GM_xmlhttpRequest` |
+| google-search | Google SERP 判读与结果页采集 |
+| human-gate | 等待人工确认后继续编排 |
+| link-table | 导出页面链接及 css、xpath |
+| next-page | 翻页采集 |
+| policy-surface | 报告 CSP、密码框与存储键名 |
+| response-tap | 旁路 fetch、XHR、open、WebSocket、EventSource |
+| scroll-until-end | 滚动至无新增内容 |
+| spa-route | 监听 `pushState`、`replaceState`、`popstate`、`hashchange` |
+| x-search | x.com 实时搜索 |
 
 ## 测试
 
