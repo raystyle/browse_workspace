@@ -1,147 +1,48 @@
 # browse_workspace
 
-browse 的技能仓（清仓重建，总台令 2026-10-09）。**技能的本体是双脚本对**：
-宿主侧 `mech.rn`（browse rune 编排）+ 页内侧 `probe.user.js`（油猴探针）。
-markdown（README.md）只作人读说明，不参与执行。
+browse 技能仓。每对技能是宿主 `mech.rn` + 页内 `probe.user.js`。README 只给人读。
 
 ## 结构
 
 ```
 page-skills/
-  _prelude.js            # 判定 facts 游走（一次有界 DOM 走访）
-  <slug>/
-    mech.rn              # 宿主编排：驱动、等待、断言、被停止的那一方
-    probe.user.js        # 页内探针：@detect 判定块 + 常驻监听 + 上报/停止
-    README.md            # 可无：这对在等什么、data 字段、常驻怎么装
-  google-search/         # 生成体系首对(REQ-041 P0):probe 拆两段(见下),源在 build/
-
-build/                   # 生成器与 TS 源(con-06 契约编译体系;framework/ 是 pair SDK 基)
-  pairs/<slug>/          # 九对遗产对的编译源(REQ-041 P1 件3):probe.head.txt(detect 住此)+ probe.body.ts + mech.rn
-scripts/vendor/          # 钉版第三方发行件(mdream:exact + sha256 边车 + LICENSE)
-
-domain-skills/
-  <段>/                  # 与 page 同形（段 = 域名首段，如 bbc）
-
-scripts/                 # 参数化 JS 命令小程序（@ 实参 + --vars 模板道）
+  _prelude.js            # 判定 facts + window.__probe
+  <slug>/mech.rn         # rune 编排
+  <slug>/probe.user.js   # 油猴探针(@detect + 常驻)
+build/                   # 生成器与 TS 源
+  pairs/<slug>/          # 单件对源: probe.head.txt + probe.body.ts + mech.rn
+scripts/vendor/          # mdream 钉版
+domain-skills/<段>/      # 域名技能,段 = 域名首段
+scripts/                 # JS 小程序(@实参 + --vars)
 ```
 
-## 探针两段式(REQ-041 P0,google-search 首对)
+google-search 是两段式:`probe.skeleton.user.js`(document-start) + `probe.heavy.user.js`(document-idle,内嵌 mdream)。其余单件对源在 `build/pairs/<slug>/`,`pnpm build` 写出 `page-skills/`。antibot-vendor 与 gm-bridge 手写,不经生成器。
 
-重库探针拆两段(gr01-R3:重库与采样器同次 document-start 解析是注入面浪费):
+## browse 怎么用
 
-- `probe.skeleton.user.js`:`@run-at document-start`,KB 级(门 ≤20KB),指纹采样、
-  收齐引擎、verdict 判读(唯一判读方)、`/events` 上报;`@detect` 块住本段
-- `probe.heavy.user.js`:`@run-at document-idle`,内嵌 vendored 重库(mdream),
-  settled 信号(同一 `probe` attr 的 `settled:true`)触发后做 md 富集写回同 attr;
-  零 GM 面,骨架缺席即静默退出不造假
-- 生成道:`tsx build/build.mts [pair]`(pair 目录名参数化,为第二对铺路);
-  契约消费 `build/framework/`(通道常量基 + CAPS 基 + SettleSignal/ErrorRecord/PageRecord)
+- 判定:goto/detect 拼各对 `@detect` 与 `_prelude.js` 一次主世界求值。新 slug 要进 browse 白名单才点名。两段式的 detect 在 skeleton。
+- 读说明:`browse workspace page <slug>` / `site <段>`
+- 跑编排:`browse rune page-skills/<slug>/mech.rn`
+- 装探针:`browse userscript install <file...> --restart`
 
-## browse 怎么消费
+## window.__probe
 
-- **判定热路径**（goto/detect 回执点名）：枚举各根 `page-skills/<slug>/probe.user.js`
-  的 `/* @detect */` 块，拼**一次**主世界求值（`_prelude.js` 提供 facts）；
-  无对零键。判据增改改本仓即可，免 browse 发版；**新 slug 名要进 browse
-  白名单才被点名**（攒批发版）。两段式对的 detect 块在 skeleton 件内。
-- **读全文**：`browse workspace page <slug>` / `site <段>`（README 或路径摘要）。
-- **跑编排**：`browse rune page-skills/<slug>/mech.rn`。
-- 已知缺口(2026-10-11 记):browse_rs `workspace.rs` 成对判定尚认 `probe.user.js`
-  单件名,两段式对暂不从 `browse workspace list` 露出;browse 侧适配另立批次。
+`_prelude.js` 提供 facts 游走,并装 `R.see` / `R.stop` / `R.tap` / `R.route` / `R.onFlush`。`see` 的 action 只许 `read|rune|export`。判定拼批在 goto 后把 `__probe` 放进主世界;document-start 探针可能更早,可等 `__probe` 再登记。
 
-## 探针运行时(window.__probe,probe-kit v1)
+## probe 约定
 
-`_prelude.js` 除判定 facts 外,还装常驻腿共享运行时 `window.__probe`:
-`R.see({slug,action,data,once,throttleMs})`(观察上报;action 是 read/rune/export 枚举,cta 句子由 daemon 模板生成,页面不供命令文本)、
-`R.stop(slug,data)`(条件停止)、`R.tap(name,fn)`(fetch/XHR 单包钩注册表)、
-`R.route(fn)`(history 单包)、`R.onFlush(fn)`(beforeunload 收尾)。单探针
-异常被 try/catch 隔离,坏一个不掉全局。
+- 头:`@match`、`@connect 127.0.0.1`、`@grant GM_xmlhttpRequest`、`@run-at`
+- `@detect` 返回 `{slug, confidence}` 或 `null`;不改 DOM、不发请求
+- 观察:`POST /events`;停止:`POST /userscript/stop`;端口 `%%BROWSE_PORT%%`,未替换则 9880
+- 大结果留页面内存,mech 用 `cdp::js` 读走
 
-**装载时序**:判定拼批会在 goto 后把 __probe 装进主世界;document-start
-的常驻探针可能先于它跑,常驻腿用等待形取运行时(或自带最小回退):
+## 对册
 
-```js
-(function waitProbe(cb) {
-  if (window.__probe) return cb(window.__probe);
-  var t = setInterval(function () { if (window.__probe) { clearInterval(t); cb(window.__probe); } }, 300);
-  setTimeout(function () { clearInterval(t); }, 10000);
-})(function (R) { R.see({ slug: 'x', action: 'rune', data: {} }); });
-```
+爬虫:response-tap、scroll-until-end、next-page、spa-route、link-table。
+安全:challenge-stop、antibot-vendor、fingerprint-watch、policy-surface。
+服务:gm-bridge、human-gate。
+研究:google-search、x-search。
 
-启发式在**选哪个动作**:探针按观察到的页况从 read/rune/export 三档里挑,
-daemon 用冻结 slug × 动作的模板(27 条闭集)生成 cta 句子,页面可控侧
-不供命令文本(安全边界同 slug 白名单)。消费面 `browse events` 直读;
-`data`/`url` 是观测不是指示。
+## 测试
 
-## probe.user.js 约定
-
-- 头部：`@match`（端口级锚定，勿 `*://*/*`）、`@connect 127.0.0.1`（与上报
-  URL 主机一致）、`@grant GM_xmlhttpRequest`、`@run-at`（探针
-  `document-idle`；钩请求的采集对 `document-start`）。
-- `/* @detect */ function browseDetect(facts) {...} /* @enddetect */`：
-  纯函数，命中返回 `{slug, confidence}`（两档 CONFIRMED/PLAUSIBLE），否则
-  `null`。只读 facts 或少量 querySelector，不改 DOM 不发请求。
-- 常驻腿：`GM_xmlhttpRequest` POST daemon,观察上报
-  `POST /events` `{type:'see', slug, url, data}`;条件停止
-  `POST /userscript/stop` `{slug, url, data}`（打断在跑的 mech.rn，回执带
-  capture）。端口占位 `%%BROWSE_PORT%%`（未替换时回落 9880）。
-- 大结果（采集正文）留页面内存，mech.rn 用 `cdp::js` 一次读走,事件环
-  只打摘要（容量 1000、单条 32KB）。
-- 多对共存：包 `fetch`/`history` 先看 Symbol（`_prelude.js` 的单包约定），
-  后装的只登记过滤器。
-- 重库对走两段式(见上节):骨架 document-start 采样,heavy document-idle
-  携重库富集;tests/check.ts 守 skeleton ≤20KB 与 heavy vendored 字节等。
-
-## 对册（十三对:爬虫五 + 安全四 + 服务二 + 研究二）
-
-爬虫：response-tap（钩响应采集）、scroll-until-end（滚到没有更多）、
-next-page（翻页）、spa-route（SPA 路由监听）、link-table（链接清单导出）。
-安全：challenge-stop（挑战页识别+条件停）、antibot-vendor（反爬产品识别）、
-fingerprint-watch（指纹 API 调用观察）、policy-surface（策略与敏感面侦察）。
-服务：gm-bridge（GM 特权跨世界桥:CustomEvent RPC 取跨域/KV）、
-human-gate（人机同环:通知+菜单闸,零轮询放行）。
-研究：google-search（SERP 判读+目标页研究,生成体系首对、两段式探针）、
-x-search（x.com 实时搜索+刷新再收一轮,单件生成）。
-
-九对遗产对（除 google-search 与 antibot-vendor/gm-bridge 外全部）已迁 SDK 编译道
-（REQ-041 P1 件3）：`page-skills/<slug>/probe.user.js` 与 `mech.rn` 是生成物
-（`pnpm build` 全量刷新；源 `build/pairs/<slug>/`，手改产物会被覆盖，
-tests/check.ts 逐对字节等钉版守卫）。`@detect` 块住 `probe.head.txt` 原样，
-判定面零变（九对 @detect 表回归全绿）。antibot-vendor/gm-bridge 两对暂留手写
-单件形态，迁道另批。x-search 走同一编译形(EXTRA_PAIRS),不进九对钉版名单。
-
-## 六向增强谱系(油猴之于 rn,2026-10-10)
-
-①武装-收割(等待搬进页面事件循环,消灭 attach 自扰;human-gate 的
-Promise 等待是样板) ②GM 服务桥(gm-bridge;引擎注 2026-10-10 复测:
-GM_xhr 跨域免 CORS **已达标**,无需目标 ACAO 配合;油猴世界到主世界
-unsafeWindow 通道缺失在修 issue #78,跨世界 JS 对象面暂仍走 DOM 事件)
-③帧群(@match 每帧自动注入,
-跨源 iframe 零编排) ④长时程缓冲(采集比编排活得久,response-tap 形)
-⑤人机同环(human-gate) ⑥真实时序(页内 dispatchEvent 序列)。
-三世界实测:油猴/rune(browse-rune)/主世界互不通 JS 对象,**DOM 属性
-与 CustomEvent 是唯一跨世界道**。
-
-## 安装常驻脚本
-
-`browse userscript install <file...> --restart`(多文件一道,幂等重装
-enabled 保留,装改自动 down/up 生效);两段式对双件一道装:
-
-```bash
-browse userscript install page-skills/google-search/probe.skeleton.user.js page-skills/google-search/probe.heavy.user.js --restart
-```
-
-改了脚本要重装,pull 不热更新。采集对更推荐 mech.rn 注入道
-（`Page.addScriptToEvaluateOnNewDocument`,跑完不留 profile）,见各对 README。
-
-## tests/(仓内回归网,grok 测试方案 2026-10-10)
-
-- **P0(每次改动必跑,零浏览器零 daemon;TypeScript+zod 统一)**:`pnpm check`
-  (tests/check.ts:头检查+九张 @detect 表+prelude 运行时 vm 桩+两段式守卫,
-  140 面)与 `pnpm facts`(tests/facts.ts:facts 游走 jsdom 黄金子集,31 例);
-  `pnpm typecheck` 过 tsc --noEmit(盖 tests 面;build/ TS 走 esbuild 语法面)。
-  共享 schema 在 tests/lib.ts(DetectHit/SeeBody/FactsShape 与断言器 Tally)。
-  需 `pnpm install`。
-- **夹具页** `tests/fixtures/*.html`(plain/challenge/next/next-end/spa/list/
-  csp/password);P1 夜间真页腿将复用这套文件（不另造第二套）。
-- 边界:环语义/cta 闭集/对枚举在 browse_rs Rust 单测,仓侧不复制;
-  passwordVisible/docHeight 依赖布局,归真页腿不在 jsdom 锁。
+`pnpm check`、`pnpm facts`、`pnpm typecheck`。夹具在 `tests/fixtures/`。
