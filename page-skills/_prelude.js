@@ -123,26 +123,57 @@ window.__probe = window.__probe || (function () {
     } catch (e) {}
   };
 
-  // history 单包(路由观察)
-  // 路由观察:回调登记成表(history 只包一次,每个回调都要收到事件——
-  // grok 测试方案抓的 bug:旧形二次注册只听得到 popstate 听不到 pushState)
+  // history 单包(路由观察)。本文件由判定拼批在主世界执行。
+  // 回调登记成表(history 只包一次,每个回调都要收到事件——
+  // grok 测试方案抓的 bug:旧形二次注册只听得到 popstate 听不到 pushState)。
+  // pushState 若已被 document-start 探针封死(configurable === false),
+  // 不再赋值(会抛),改登记 window.__browseRouteHooks。
   R._routeCbs = [];
+  R._routeJoined = false;
   R.route = function (fn) {
     try {
-      // 单一通知道:包装与事件监听共用(每个登记回调都收到)
       var notify = function (kind) {
-        R.rearm(); // 路径作用域去重键随路由重武装(SPA 换页可再报)
+        R.rearm();
         R._routeCbs.forEach(function (cb) {
           try { cb({ kind: kind }); } catch (e) {}
         });
       };
       R._routeCbs.push(fn);
-      if (!history.__probeWrapped) {
+      var desc = null;
+      try { desc = Object.getOwnPropertyDescriptor(history, 'pushState'); } catch (e) {}
+      var sealed = !!(desc && desc.configurable === false);
+      if (sealed && !history.__probeWrapped) {
+        if (!R._routeJoined) {
+          R._routeJoined = true;
+          var joined = window.__browseRouteHooks || (window.__browseRouteHooks = []);
+          joined.push(function (e) { notify(e && e.kind); });
+        }
+      } else if (!history.__probeWrapped) {
         var wp = history.pushState.bind(history);
         var wr = history.replaceState.bind(history);
-        history.pushState = function () { var r = wp.apply(history, arguments); notify('pushState'); return r; };
-        history.replaceState = function () { var r = wr.apply(history, arguments); notify('replaceState'); return r; };
-        Object.defineProperty(history, '__probeWrapped', { value: true });
+        function wrapped(orig, kind) {
+          return function () {
+            var r = orig.apply(history, arguments);
+            notify(kind);
+            var hooks = window.__browseRouteHooks;
+            if (hooks) {
+              for (var i = 0; i < hooks.length; i++) {
+                try { hooks[i]({ kind: kind }); } catch (e) {}
+              }
+            }
+            return r;
+          };
+        }
+        function seal(name, fn) {
+          try {
+            Object.defineProperty(history, name, { value: fn, writable: false, configurable: false });
+          } catch (e) {
+            try { history[name] = fn; } catch (e2) {}
+          }
+        }
+        seal('pushState', wrapped(wp, 'pushState'));
+        seal('replaceState', wrapped(wr, 'replaceState'));
+        try { Object.defineProperty(history, '__probeWrapped', { value: true }); } catch (e) {}
       }
       window.addEventListener('popstate', function () { notify('popstate'); });
       window.addEventListener('hashchange', function () { notify('hashchange'); });

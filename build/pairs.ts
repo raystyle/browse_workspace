@@ -12,6 +12,11 @@ export const LEGACY_PAIRS = [
 ] as const;
 export type LegacyPair = (typeof LEGACY_PAIRS)[number];
 
+/** 新增单件对,编译形与遗产对相同(head + body.ts + mech.rn),不进九对钉版名单。 */
+export const EXTRA_PAIRS = ['x-search'] as const;
+export type ExtraPair = (typeof EXTRA_PAIRS)[number];
+export type SinglePair = LegacyPair | ExtraPair;
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const PAIRS_SRC = join(HERE, 'pairs');
 
@@ -21,7 +26,7 @@ function bodyIsEmpty(src: string): boolean {
 }
 
 /** 单对 probe 组装:head(逐字:userscript 头 + @detect 块)+ esbuild 体(IIFE chrome155)。 */
-export async function assembleLegacyProbe(slug: LegacyPair, distDir: string): Promise<string> {
+export async function assembleLegacyProbe(slug: SinglePair, distDir: string): Promise<string> {
   const head = readFileSync(join(PAIRS_SRC, slug, 'probe.head.txt'), 'utf8');
   const srcPath = join(PAIRS_SRC, slug, 'probe.body.ts');
   if (bodyIsEmpty(readFileSync(srcPath, 'utf8'))) return head;
@@ -37,6 +42,6 @@ export async function assembleLegacyProbe(slug: LegacyPair, distDir: string): Pr
 }
 
 /** 单对 mech 源(逐字拷贝;九对 mech 非模板形态,编排体就是源) */
-export function legacyMech(slug: LegacyPair): string {
+export function legacyMech(slug: SinglePair): string {
   return readFileSync(join(PAIRS_SRC, slug, 'mech.rn'), 'utf8');
 }

@@ -91,7 +91,7 @@ daemon 用冻结 slug × 动作的模板(27 条闭集)生成 cta 句子,页面�
 - 重库对走两段式(见上节):骨架 document-start 采样,heavy document-idle
   携重库富集;tests/check.ts 守 skeleton ≤20KB 与 heavy vendored 字节等。
 
-## 对册（十二对:爬虫五 + 安全四 + 服务二 + 研究一）
+## 对册（十三对:爬虫五 + 安全四 + 服务二 + 研究二）
 
 爬虫：response-tap（钩响应采集）、scroll-until-end（滚到没有更多）、
 next-page（翻页）、spa-route（SPA 路由监听）、link-table（链接清单导出）。
@@ -99,14 +99,15 @@ next-page（翻页）、spa-route（SPA 路由监听）、link-table（链接清
 fingerprint-watch（指纹 API 调用观察）、policy-surface（策略与敏感面侦察）。
 服务：gm-bridge（GM 特权跨世界桥:CustomEvent RPC 取跨域/KV）、
 human-gate（人机同环:通知+菜单闸,零轮询放行）。
-研究：google-search（SERP 判读+目标页研究,生成体系首对、两段式探针）。
+研究：google-search（SERP 判读+目标页研究,生成体系首对、两段式探针）、
+x-search（x.com 实时搜索+刷新再收一轮,单件生成）。
 
 九对遗产对（除 google-search 与 antibot-vendor/gm-bridge 外全部）已迁 SDK 编译道
 （REQ-041 P1 件3）：`page-skills/<slug>/probe.user.js` 与 `mech.rn` 是生成物
 （`pnpm build` 全量刷新；源 `build/pairs/<slug>/`，手改产物会被覆盖，
 tests/check.ts 逐对字节等钉版守卫）。`@detect` 块住 `probe.head.txt` 原样，
 判定面零变（九对 @detect 表回归全绿）。antibot-vendor/gm-bridge 两对暂留手写
-单件形态，迁道另批。
+单件形态，迁道另批。x-search 走同一编译形(EXTRA_PAIRS),不进九对钉版名单。
 
 ## 六向增强谱系(油猴之于 rn,2026-10-10)
 

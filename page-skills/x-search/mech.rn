@@ -1,0 +1,251 @@
+// x-search 宿主编排(生成物:build/build.mts 渲染;源 build/pairs/x-search/mech.bodies.ts,勿手改)
+// 打开 x.com 实时搜索,等油猴把帖子写入 probe,再刷新收一轮新帖。
+// 用法:browse rune page-skills/x-search/mech.rn --vars q=OpenAI [--vars rounds=2]
+// rounds 缺省 2,上限 4。不发帖、不点赞。登录墙直接返回。
+// 网络错误(net:: / chrome-error / 页内「出错了」)最多再开两次搜索,仍失败回 verdict=net,不伪装成空结果。
+pub async fn main() {
+    let q = "<%= q %>";
+    let rounds = <%= rounds | default(2) %>;
+    if rounds < 1 { rounds = 1; }
+    if rounds > 4 { rounds = 4; }
+    fn fail1(stage, op, message) {
+        let m = message.replace("\r", " ").replace("\n", " ").replace("\\", "\\\\").replace("\"", "\\\"");
+        "{\"probe\":{\"slug\":\"x-search\",\"verdict\":\"error\",\"settled\":false,\"posts\":[]},\"posts\":[],\"rounds\":0,\"fresh\":0,\"errors\":[{\"stage\":\"" + stage + "\",\"op\":\"" + op + "\",\"message\":\"" + m + "\"}]}"
+    }
+    fn netfail(message) {
+        let m = message.replace("\r", " ").replace("\n", " ").replace("\\", "\\\\").replace("\"", "\\\"");
+        "{\"probe\":{\"slug\":\"x-search\",\"verdict\":\"net\",\"settled\":false,\"posts\":[]},\"posts\":[],\"rounds\":0,\"fresh\":0,\"errors\":[{\"stage\":\"search\",\"op\":\"net\",\"message\":\"" + m + "\"}]}"
+    }
+    match cdp::js(r#"function ping() {
+  return 1;
+}
+return ping(args);"#, #{}).await {
+        Ok(_) => (),
+        Err(_) => { let _t = cdp::dialect("newTab", "").await; }
+    }
+    let u = match cdp::js(r#"function buildUrl(args) {
+  const q = String(args.q || "");
+  return "https://x.com/search?q=" + encodeURIComponent(q) + "&src=typed_query&f=live";
+}
+return buildUrl(args);"#, #{"q" : q}).await {
+        Ok(v) => v,
+        Err(e) => { return Ok(fail1("build", "js", e.message)); }
+    };
+    let heals = 0;
+    let opened = 0;
+    let net_msg = "";
+    while opened == 0 && heals < 3 {
+        match cdp::goto(u.clone()).await {
+            Ok(_) => { opened = 1; },
+            Err(e) => {
+                net_msg = e.message;
+                heals = heals + 1;
+                if heals < 3 {
+                    time::sleep(time::Duration::from_millis(800)).await;
+                }
+            }
+        }
+    }
+    if opened == 0 {
+        return Ok(netfail(net_msg));
+    }
+    let n = 0;
+    let blob = "";
+    let since = 0;
+    let net_doc = "";
+    while n < rounds {
+        let i = 0;
+        let got = "";
+        while i < 40 {
+            if got == "" {
+                let tick = match cdp::js(r#"function tick(args) {
+  function netDoc(detail) {
+    const href = String(location.href || "");
+    const text = String(detail || href);
+    return "NET\n" + JSON.stringify({
+      probe: { slug: "x-search", verdict: "net", settled: false, href, q: "", posts: [] },
+      posts: [],
+      rounds: 0,
+      fresh: 0,
+      errors: [{ stage: "search", op: "net", message: text.slice(0, 300) }]
+    });
+  }
+  function isNet() {
+    const href = String(location.href || "");
+    if (href.indexOf("chrome-error://") === 0) return true;
+    if (document.getElementById("main-frame-error") || document.querySelector(".neterror")) return true;
+    return false;
+  }
+  function xAppNet() {
+    if (document.querySelectorAll("article").length > 0) return "";
+    const col = document.querySelector('[data-testid="primaryColumn"]');
+    const flat = (col ? col.innerText || "" : "").replace(/\s+/g, " ").trim();
+    if (flat.indexOf("\u51FA\u9519\u4E86") >= 0 || flat.indexOf("Something went wrong") >= 0) return flat.slice(0, 180);
+    return "";
+  }
+  function queryOf() {
+    try {
+      return new URL(location.href).searchParams.get("q") || "";
+    } catch {
+      return "";
+    }
+  }
+  function isLogin() {
+    const path = location.pathname || "";
+    return path.indexOf("/i/jf/") === 0 || path.indexOf("/i/flow/login") === 0 || path.indexOf("/login") === 0;
+  }
+  function readProbe() {
+    try {
+      return JSON.parse(document.documentElement.getAttribute("probe") || "null");
+    } catch {
+      return null;
+    }
+  }
+  const want = String(args.q || "");
+  const since = Number(args.since || 0);
+  if (isNet()) {
+    const codeEl = document.querySelector(".error-code");
+    const msgEl = document.getElementById("main-message");
+    const code = codeEl ? (codeEl.textContent || "").replace(/\s+/g, " ").trim() : "";
+    const msg = msgEl ? (msgEl.textContent || "").replace(/\s+/g, " ").trim() : "";
+    return netDoc((code + " " + msg).trim());
+  }
+  if (isLogin()) {
+    const p2 = readProbe();
+    if (p2 && p2.settled && p2.verdict === "login") {
+      return "LOGIN\n" + JSON.stringify({
+        probe: p2,
+        posts: [],
+        rounds: 0,
+        fresh: 0,
+        errors: [{ stage: "search", op: "login", message: "x.com \u8981\u767B\u5F55,\u5F53\u524D profile \u6CA1\u6709\u53EF\u7528\u4F1A\u8BDD" }]
+      });
+    }
+    return "WAIT";
+  }
+  if ((location.pathname || "").indexOf("/search") !== 0) return "WAIT";
+  if (queryOf() !== want) return "WAIT";
+  const xerr = xAppNet();
+  if (xerr) return netDoc(xerr);
+  const p = readProbe();
+  if (!p || !p.settled || p.verdict !== "ok" || !p.posts || !p.posts.length) return "WAIT";
+  if (!p.at || Number(p.at) <= since) return "WAIT";
+  return "READY\n" + (document.documentElement.getAttribute("probe") || "null");
+}
+return tick(args);"#, #{"q" : q, "since" : since}).await {
+                    Ok(v) => v,
+                    Err(_) => "WAIT",
+                };
+                if tick.starts_with("LOGIN\n") {
+                    return Ok(tick.replace("LOGIN\n", ""));
+                } else if tick.starts_with("NET\n") {
+                    net_doc = tick.replace("NET\n", "");
+                    got = "NET";
+                    i = 40;
+                } else if tick.starts_with("READY\n") {
+                    got = tick.replace("READY\n", "");
+                    if got == "null" { got = ""; }
+                }
+                if got == "" {
+                    time::sleep(time::Duration::from_millis(250)).await;
+                }
+            }
+            i = i + 1;
+        }
+        if got == "NET" {
+            if heals >= 2 {
+                return Ok(net_doc.clone());
+            }
+            heals = heals + 1;
+            match cdp::goto(u.clone()).await {
+                Ok(_) => (),
+                Err(e) => { net_msg = e.message; },
+            };
+            time::sleep(time::Duration::from_millis(800)).await;
+        } else {
+            if got != "" {
+                if blob == "" { blob = got; } else { blob = blob + "\n" + got; }
+                since = match cdp::js(r#"function stamp() {
+  try {
+    const p = JSON.parse(document.documentElement.getAttribute("probe") || "null");
+    return p && p.at ? Number(p.at) : 0;
+  } catch {
+    return 0;
+  }
+}
+return stamp(args);"#, #{}).await {
+                    Ok(v) => v,
+                    Err(_) => since,
+                };
+            }
+            n = n + 1;
+            if n < rounds {
+                match cdp::js(r#"function reloadPage() {
+  location.reload();
+  return 1;
+}
+return reloadPage(args);"#, #{}).await {
+                    Ok(_) => (),
+                    Err(_) => (),
+                };
+                time::sleep(time::Duration::from_millis(400)).await;
+            }
+        }
+    }
+    if blob == "" {
+        return Ok("{\"probe\":{\"slug\":\"x-search\",\"verdict\":\"empty\",\"settled\":false,\"href\":\"\",\"q\":\"" + q.replace("\\", "").replace("\"", "") + "\",\"posts\":[]},\"posts\":[],\"rounds\":0,\"fresh\":0,\"errors\":[{\"stage\":\"search\",\"op\":\"timeout\",\"message\":\"等待窗内没有帖子\"}]}");
+    }
+    let packed = match cdp::js(r#"function pack(args) {
+  const lines = String(args.blob || "").split("\n").filter((line) => line.length > 0);
+  const rounds = [];
+  for (let i = 0; i < lines.length; i++) {
+    try {
+      rounds.push(JSON.parse(lines[i]));
+    } catch {
+    }
+  }
+  const first = {};
+  const base = rounds[0] && rounds[0].posts ? rounds[0].posts : [];
+  for (let i = 0; i < base.length; i++) first[base[i].id] = 1;
+  const seen = {};
+  const posts = [];
+  let fresh = 0;
+  for (let r = 0; r < rounds.length; r++) {
+    const list = rounds[r].posts || [];
+    for (let i = 0; i < list.length; i++) {
+      const post = list[i];
+      if (!post.id || seen[post.id]) continue;
+      seen[post.id] = 1;
+      const isFresh = r > 0 && !first[post.id];
+      if (isFresh) fresh += 1;
+      posts.push({
+        id: post.id,
+        href: post.href,
+        user: post.user,
+        text: post.text,
+        time: post.time,
+        fresh: isFresh
+      });
+    }
+  }
+  const last = rounds.length ? rounds[rounds.length - 1] : {};
+  return JSON.stringify({
+    probe: {
+      slug: "x-search",
+      verdict: posts.length ? "ok" : "empty",
+      settled: posts.length > 0,
+      href: last.href || "",
+      q: last.q || String(args.q || "")
+    },
+    posts,
+    rounds: rounds.length,
+    fresh,
+    errors: []
+  });
+}
+return pack(args);"#, #{"blob" : blob, "q" : q}).await {
+        Ok(v) => v,
+        Err(e) => { return Ok(fail1("pack", "js", e.message)); }
+    };
+    Ok(packed)
+}

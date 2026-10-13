@@ -2,6 +2,8 @@
 (() => {
   // build/pairs/spa-route/probe.body.ts
   (function() {
+    var page = typeof unsafeWindow !== "undefined" && unsafeWindow ? unsafeWindow : window;
+    var hist = page.history;
     var PORT = (function() {
       var p = "%%BROWSE_PORT%%";
       return p.indexOf("%%") === 0 ? "9880" : p;
@@ -17,30 +19,68 @@
         data: JSON.stringify({ type: "see", slug: "spa-route", url: location.href, data: { kind: type } })
       });
     }
+    function fan(kind) {
+      report(kind);
+      var hooks = page.__browseRouteHooks;
+      if (!hooks) return;
+      for (var i = 0; i < hooks.length; i++) {
+        try {
+          hooks[i]({ kind });
+        } catch (e) {
+        }
+      }
+    }
+    function seal(name, fn) {
+      try {
+        Object.defineProperty(hist, name, { value: fn, writable: false, configurable: false });
+      } catch (e) {
+        try {
+          hist[name] = fn;
+        } catch (e2) {
+        }
+      }
+    }
     var KEY = "__browseRouteWrapped";
+    var desc;
     try {
-      var H = history;
-      if (!H[KEY]) {
-        var wp = history.pushState.bind(history);
-        var wr = history.replaceState.bind(history);
-        history.pushState = function() {
-          var r = wp.apply(history, arguments);
-          report("pushState");
+      desc = Object.getOwnPropertyDescriptor(hist, "pushState");
+    } catch (e) {
+    }
+    var sealed = !!(desc && desc.configurable === false);
+    try {
+      if (sealed) {
+        if (!page.__browseSpaJoined) {
+          page.__browseSpaJoined = true;
+          var joined = page.__browseRouteHooks || [];
+          page.__browseRouteHooks = joined;
+          joined.push(function(e) {
+            report(e && e.kind);
+          });
+        }
+      } else if (!hist[KEY]) {
+        var wp = hist.pushState.bind(hist);
+        var wr = hist.replaceState.bind(hist);
+        seal("pushState", function() {
+          var r = wp.apply(hist, arguments);
+          fan("pushState");
           return r;
-        };
-        history.replaceState = function() {
-          var r = wr.apply(history, arguments);
-          report("replaceState");
+        });
+        seal("replaceState", function() {
+          var r = wr.apply(hist, arguments);
+          fan("replaceState");
           return r;
-        };
-        Object.defineProperty(history, KEY, { value: true });
+        });
+        try {
+          Object.defineProperty(hist, KEY, { value: true });
+        } catch (e) {
+        }
       }
     } catch (e) {
     }
-    window.addEventListener("popstate", function() {
+    page.addEventListener("popstate", function() {
       report("popstate");
     });
-    window.addEventListener("hashchange", function() {
+    page.addEventListener("hashchange", function() {
       report("hashchange");
     });
   })();

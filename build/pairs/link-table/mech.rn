@@ -7,6 +7,6 @@ pub async fn main() {
         time::sleep(time::Duration::from_millis(700)).await;
         i = i + 1;
     }
-    let v = cdp::js(r#"return JSON.stringify(Object.keys((window.__browseLinks && window.__browseLinks.seen) || {}))"#, #{}).await?;
+    let v = cdp::js(r#"var L = window.__browseLinks || {}; if (L.items) return JSON.stringify(L.items); return JSON.stringify(Object.keys(L.seen || {}))"#, #{}).await?;
     Ok(v)
 }

@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CAPS, TEXT_CAPS } from './contracts.values.ts';
-import { LEGACY_PAIRS, assembleLegacyProbe, legacyMech, type LegacyPair } from './pairs.ts';
+import { LEGACY_PAIRS, EXTRA_PAIRS, assembleLegacyProbe, legacyMech, type SinglePair } from './pairs.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = join(ROOT, 'dist-build');
@@ -92,10 +92,12 @@ writeFileSync(join(PKG, 'mech.rn'), tpl);
 const ONLY = process.argv[2] && process.argv[2] !== '' ? true : false;
 let nLegacy = 0;
 if (!ONLY) {
-  for (const slug of LEGACY_PAIRS) {
-    const probe = await assembleLegacyProbe(slug as LegacyPair, DIST);
-    writeFileSync(join(ROOT, 'page-skills', slug, 'probe.user.js'), probe);
-    writeFileSync(join(ROOT, 'page-skills', slug, 'mech.rn'), legacyMech(slug as LegacyPair));
+  for (const slug of [...LEGACY_PAIRS, ...EXTRA_PAIRS] as SinglePair[]) {
+    const dir = join(ROOT, 'page-skills', slug);
+    mkdirSync(dir, { recursive: true });
+    const probe = await assembleLegacyProbe(slug, DIST);
+    writeFileSync(join(dir, 'probe.user.js'), probe);
+    writeFileSync(join(dir, 'mech.rn'), legacyMech(slug));
     nLegacy++;
   }
 }

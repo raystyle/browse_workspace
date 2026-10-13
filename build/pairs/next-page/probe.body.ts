@@ -1,5 +1,7 @@
-// next-page 页内侧体(REQ-041 P1 件3 迁 SDK 编译道;源 page-skills 单件遗产,逻辑逐字)
+// next-page 页内侧体(REQ-041 P1 件3 迁 SDK 编译道;Katana 课:命中节点写 css/xpath)
 // 翻页腿:翻到没有下一页或空转(页签名不变)即 /userscript/stop 打断宿主 mech。
+import { cssPath, xpath } from '../../dompath.ts';
+
 declare const GM_xmlhttpRequest: (o: Record<string, unknown>) => void;
 
 (function () {
@@ -17,8 +19,16 @@ declare const GM_xmlhttpRequest: (o: Record<string, unknown>) => void;
       data: JSON.stringify(Object.assign({ slug: 'next-page', url: location.href }, { data: data }))
     });
   }
+  function stamp(next: Element): void {
+    next.setAttribute('data-browse-next', '1');
+    var css = cssPath(next).slice(0, 300);
+    var xp = xpath(next).slice(0, 300);
+    if (css) next.setAttribute('data-browse-css', css);
+    if (xp) next.setAttribute('data-browse-xpath', xp);
+  }
   function check(): boolean {
     var next = document.querySelector('a[rel=next],[rel="next"],[aria-label="Next"],a[aria-label="next"],a.next,a[title="Next"]');
+    if (next) stamp(next);
     var sig = pageSig();
     var samePage = lastHtml !== null && sig === lastHtml;
     lastHtml = sig;

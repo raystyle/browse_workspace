@@ -3,6 +3,7 @@
 // @match        *://*/*
 // @connect      127.0.0.1
 // @grant        GM_xmlhttpRequest
+// @grant        unsafeWindow
 // @run-at       document-idle
 // ==/UserScript==
 /* @detect */

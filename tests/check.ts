@@ -11,7 +11,9 @@ import { Tally, DetectHit, SeeBody, type DetectHit as DetectHitT } from './lib.t
 import { ContentTiers } from '../build/framework/schemas.ts';
 import { MechOutput } from '../build/contracts.ts';
 import { digestText, extractHighlights } from '../build/framework/tiers.ts';
-import { LEGACY_PAIRS, assembleLegacyProbe, legacyMech } from '../build/pairs.ts';
+import { JSDOM } from 'jsdom';
+import { cssPath, xpath } from '../build/dompath.ts';
+import { LEGACY_PAIRS, EXTRA_PAIRS, assembleLegacyProbe, legacyMech } from '../build/pairs.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PK = join(ROOT, 'page-skills');
@@ -22,10 +24,10 @@ const slugs = readdirSync(PK, { withFileTypes: true })
   .filter((e) => e.isDirectory())
   .map((e) => e.name)
   .sort();
-t.eq('十二对在册', slugs, [
+t.eq('十三对在册', slugs, [
   'antibot-vendor', 'challenge-stop', 'fingerprint-watch', 'gm-bridge',
   'google-search', 'human-gate', 'link-table', 'next-page', 'policy-surface',
-  'response-tap', 'scroll-until-end', 'spa-route',
+  'response-tap', 'scroll-until-end', 'spa-route', 'x-search',
 ]);
 // 两段式探针对(skeleton+heavy 双件)按存在性识别;单件对沿用 probe.user.js(REQ-041 P0)
 function probeFiles(slug: string): string[] {
@@ -157,9 +159,92 @@ for (const slug of slugs) {
       t.ok(`${slug}: mech.rn 与编译道源字节等(逐字拷贝钉版)`, mech === legacyMech(slug), `len got=${mech.length} want=${legacyMech(slug).length}`);
     }
     t.ok('policy-surface: 纯判定对 head 原样(空体出空串)', readFileSync(join(PK, 'policy-surface/probe.user.js'), 'utf8') === readFileSync(join(ROOT, 'build/pairs/policy-surface/probe.head.txt'), 'utf8'));
+    for (const slug of EXTRA_PAIRS) {
+      const want = await assembleLegacyProbe(slug, dist);
+      const got = readFileSync(join(PK, slug, 'probe.user.js'), 'utf8');
+      t.ok(`${slug}: probe.user.js 与编译道字节等`, got === want, `len got=${got.length} want=${want.length}`);
+      const mech = readFileSync(join(PK, slug, 'mech.rn'), 'utf8');
+      t.ok(`${slug}: mech.rn 与编译道源字节等`, mech === legacyMech(slug), `len got=${mech.length} want=${legacyMech(slug).length}`);
+    }
   } finally {
     rmSync(dist, { recursive: true, force: true });
   }
+}
+
+// ---------- ①g gm-bridge 默认拒(前缀表在源码,不走事件) ----------
+{
+  const gmb = readFileSync(join(PK, 'gm-bridge/probe.user.js'), 'utf8');
+  t.ok(
+    'gm-bridge: 前缀表只含 8872',
+    /var ALLOW_FETCH = \['http:\/\/127\.0\.0\.1:8872\/'\];/.test(gmb),
+  );
+  const allowAt = gmb.indexOf('function allowed(');
+  const xhrAt = gmb.indexOf('GM_xmlhttpRequest({');
+  t.ok('gm-bridge: allowed 定义早于 GM_xhr 调用', allowAt !== -1 && xhrAt !== -1 && allowAt < xhrAt);
+  t.ok('gm-bridge: 不调用 GM 存储', !/GM_getValue|GM_setValue/.test(gmb));
+}
+
+// ---------- ①h next-page 路径盖章与 mech 回退 ----------
+{
+  const npMech = readFileSync(join(PK, 'next-page/mech.rn'), 'utf8');
+  const npProbe = readFileSync(join(PK, 'next-page/probe.user.js'), 'utf8');
+  t.ok('next-page: 探针选择器含 title', npProbe.includes('a[title="Next"]'));
+  t.ok('next-page: mech 选择器无 title', npMech.includes('a[rel=next]') && !npMech.includes('a[title="Next"]'));
+  t.ok('next-page: 循环 200 与等待 1500ms', npMech.includes('while i < 200') && npMech.includes('from_millis(1500)'));
+  t.ok(
+    'next-page: 探针写下 css 与 xpath',
+    npProbe.includes('data-browse-css') && npProbe.includes('data-browse-xpath') && npProbe.includes('data-browse-next'),
+  );
+  t.ok('next-page: 路径含 nth-child', npProbe.includes('nth-child'));
+  t.ok(
+    'next-page: mech 回退读属性',
+    npMech.includes('data-browse-css') && npMech.includes('data-browse-xpath') && npMech.includes('document.evaluate'),
+  );
+  const pickAt = npMech.indexOf('function pick()');
+  const pickEnd = npMech.indexOf('var n=pick()');
+  t.ok('next-page: pick 体无井号引号序列', pickAt >= 0 && pickEnd > pickAt && !npMech.slice(pickAt, pickEnd).includes('"#'));
+}
+
+// ---------- ①i x-search 实时搜索 ----------
+{
+  const xsMech = readFileSync(join(PK, 'x-search/mech.rn'), 'utf8');
+  const xsProbe = readFileSync(join(PK, 'x-search/probe.user.js'), 'utf8');
+  t.ok('x-search: 实时搜索 URL', xsMech.includes('f=live') && xsMech.includes('x.com/search?q='));
+  t.ok('x-search: 探针用 tweetText', xsProbe.includes('[data-testid="tweetText"]'));
+  t.ok('x-search: 250ms 轮询与刷新', xsMech.includes('while i < 40') && xsMech.includes('from_millis(250)') && xsMech.includes('reloadPage'));
+  t.ok('x-search: rounds 缺省 2', xsMech.includes('<%= rounds | default(2) %>'));
+  t.ok('x-search: 探针零 mdream', !xsProbe.includes('htmlToMarkdown') && !xsProbe.includes('window.mdream'));
+  t.ok(
+    'x-search: 网络错误自愈',
+    xsMech.includes('chrome-error://') &&
+      xsMech.includes('出错了') &&
+      xsMech.includes('Something went wrong') &&
+      xsMech.includes('verdict\\":\\"net\\"') &&
+      xsMech.includes('heals') &&
+      xsMech.includes('cdp::goto(u.clone())') &&
+      xsMech.includes('else if tick.starts_with("NET\\n")'),
+  );
+}
+
+// ---------- ①j 主世界封钩与元素路径 ----------
+{
+  const spa = readFileSync(join(PK, 'spa-route/probe.user.js'), 'utf8');
+  const tap = readFileSync(join(PK, 'response-tap/probe.user.js'), 'utf8');
+  const links = readFileSync(join(PK, 'link-table/probe.user.js'), 'utf8');
+  const pre = readFileSync(join(PK, '_prelude.js'), 'utf8');
+  t.ok('spa-route: 授权 unsafeWindow', /@grant\s+unsafeWindow/.test(spa));
+  t.ok(
+    'spa-route: 封死 pushState 并留登记表',
+    spa.includes('writable: false') && spa.includes('configurable: false') && spa.includes('__browseRouteHooks'),
+  );
+  t.ok('response-tap: 授权 unsafeWindow', /@grant\s+unsafeWindow/.test(tap));
+  t.ok(
+    'response-tap: 记下 open、WebSocket、EventSource',
+    tap.includes('WebSocket') && tap.includes('EventSource') && tap.includes('Reflect.construct') && /note\(/.test(tap) && /open/.test(tap),
+  );
+  t.ok('link-table: 授权 unsafeWindow', /@grant\s+unsafeWindow/.test(links));
+  t.ok('link-table: 导出 items 与 nth-child', links.includes('items') && links.includes('nth-child') && links.includes('data-browse-css'));
+  t.ok('prelude: 已封钩改走登记表', pre.includes('configurable === false') && pre.includes('__browseRouteHooks'));
 }
 
 // ---------- ② 九张 @detect 表(vm 喂 facts) ----------
@@ -214,7 +299,7 @@ const TABLE: ReadonlyArray<readonly [string, Record<string, unknown>, DetectHitT
   ['spa-route', {}, null],
   // 恒 null 三对:不许开始点名
   // 恒 null 五对:服务/导出型不许开始点名
-  ...(['gm-bridge', 'human-gate'] as const).map(
+  ...(['gm-bridge', 'human-gate', 'x-search'] as const).map(
     (slug) => [slug, {}, null] as const,
   ),
   ...(['response-tap', 'link-table', 'fingerprint-watch'] as const).flatMap(
@@ -307,6 +392,24 @@ function loadRuntime(sb: Record<string, unknown>): ProbeR {
   t.eq('route 回调 A 收到 pushState', seenA, ['pushState']);
   t.eq('route 回调 B 也收到 pushState(登记表修复)', seenB, ['pushState']);
   t.eq('pushState 后 rearm 生效(同参可再发)', R.see({ slug: 'challenge-stop', action: 'rune' }), true);
+  const desc = Object.getOwnPropertyDescriptor(sb.history as object, 'pushState');
+  t.ok('route 封死 pushState', desc?.writable === false && desc?.configurable === false);
+  let assignThrew = false;
+  try { (sb.history as { pushState: unknown }).pushState = function () {}; } catch { assignThrew = true; }
+  t.ok('route 封死后再赋值抛', assignThrew);
+}
+{
+  const sb = runtimeSandbox();
+  const hooks: Array<(e: { kind: string }) => void> = [];
+  (sb as { __browseRouteHooks: typeof hooks }).__browseRouteHooks = hooks;
+  function sealedPush() { hooks.forEach((h) => h({ kind: 'pushState' })); }
+  Object.defineProperty(sb.history as object, 'pushState', { value: sealedPush, writable: false, configurable: false });
+  Object.defineProperty(sb.history as object, 'replaceState', { value: function () {}, writable: false, configurable: false });
+  const R = loadRuntime(sb);
+  const seen: string[] = [];
+  R.route((e) => seen.push(e.kind));
+  (sb.history as { pushState: () => void }).pushState();
+  t.eq('已封钩时 route 仍收到 pushState', seen, ['pushState']);
 }
 {
   // tap:两过滤器各一次;响应体不被吃掉
@@ -329,6 +432,154 @@ function loadRuntime(sb: Record<string, unknown>): ProbeR {
       t.ok('tap 响应体不被吃掉', body.includes('api.json'));
     }, 10);
   })();
+}
+
+{
+  const sb = runtimeSandbox();
+  const isolatedPush = function isolatedPush() { return 'isolated'; };
+  const pagePush = function pagePush(_s: unknown, _t: string, url?: string) {
+    if (url) (sb.location as { href: string }).href = 'http://127.0.0.1:8871' + url;
+    return 'page';
+  };
+  sb.history = { pushState: isolatedPush, replaceState() {} };
+  const page = {
+    history: { pushState: pagePush, replaceState() {} },
+    addEventListener() {},
+  };
+  sb.unsafeWindow = page;
+  const posts: { data?: { kind?: string } }[] = [];
+  sb.GM_xmlhttpRequest = (o: { data: string }) => { posts.push(JSON.parse(o.data)); };
+  vm.createContext(sb);
+  vm.runInContext(readFileSync(join(PK, 'spa-route/probe.user.js'), 'utf8'), sb);
+  t.ok('spa-route 不动油猴窗 history', (sb.history as { pushState: unknown }).pushState === isolatedPush);
+  const d = Object.getOwnPropertyDescriptor(page.history, 'pushState');
+  t.ok('spa-route 封死页面 pushState', d?.writable === false && d?.configurable === false);
+  const got = (page.history.pushState as (a: unknown, b: string, u: string) => string)({}, '', '/n');
+  t.eq('spa-route 仍调用原 pushState', got, 'page');
+  t.eq('spa-route 上报 kind', posts.map((p) => p.data?.kind), ['pushState']);
+  let threw = false;
+  try { page.history.pushState = function () { return 'nope'; }; } catch { threw = true; }
+  t.ok('spa-route 页面窗赋值抛', threw);
+}
+{
+  const sb = runtimeSandbox();
+  function RawWS(this: { url: string }, url: string) { this.url = url; }
+  function RawES(this: { url: string }, url: string) { this.url = url; }
+  const opened: string[] = [];
+  const page: Record<string, unknown> = {
+    open(url: string) { opened.push(url); return url; },
+    WebSocket: RawWS,
+    EventSource: RawES,
+  };
+  sb.unsafeWindow = page;
+  const tops: string[] = [];
+  sb.GM_xmlhttpRequest = (o: { data: string }) => {
+    const body = JSON.parse(o.data) as { data?: { topKeys?: string[] } };
+    tops.push(body.data?.topKeys?.[0] ?? '');
+  };
+  vm.createContext(sb);
+  vm.runInContext(readFileSync(join(PK, 'response-tap/probe.user.js'), 'utf8'), sb);
+  const tap = page.__browseTap as { buf: { url: string; status: number; body: string }[] };
+  (page as { __RT_FILTER: string[] }).__RT_FILTER = ['keep-me'];
+  (page.open as (u: string) => void)('https://example.com/drop');
+  (page.open as (u: string) => void)('https://example.com/keep-me');
+  t.eq('response-tap open 过滤后只留一条', tap.buf.map((r) => r.url), ['https://example.com/keep-me']);
+  t.eq('response-tap open 状态 0', tap.buf[0]?.status, 0);
+  t.eq('response-tap open 摘要种类', tops, ['open']);
+  (page as { __RT_FILTER: string[] }).__RT_FILTER = [];
+  const ws = new (page.WebSocket as new (u: string) => { url: string })('ws://127.0.0.1/sock');
+  const es = new (page.EventSource as new (u: string) => { url: string })('http://127.0.0.1/events');
+  t.eq('response-tap WebSocket 实例保留 url', ws.url, 'ws://127.0.0.1/sock');
+  t.eq('response-tap EventSource 实例保留 url', es.url, 'http://127.0.0.1/events');
+  t.eq(
+    'response-tap 缓冲含三条',
+    tap.buf.map((r) => r.url),
+    ['https://example.com/keep-me', 'ws://127.0.0.1/sock', 'http://127.0.0.1/events'],
+  );
+  const wd = Object.getOwnPropertyDescriptor(page, 'WebSocket');
+  const ed = Object.getOwnPropertyDescriptor(page, 'EventSource');
+  t.ok('response-tap 封死 WebSocket 与 EventSource', wd?.configurable === false && ed?.writable === false);
+}
+function domSandbox(dom: JSDOM): Record<string, unknown> {
+  const w = dom.window;
+  return {
+    window: w,
+    document: w.document,
+    location: w.location,
+    history: w.history,
+    MutationObserver: w.MutationObserver,
+    setInterval: () => 0,
+    setTimeout: () => 0,
+    CSS: w.CSS,
+    XPathResult: w.XPathResult,
+    GM_xmlhttpRequest() {},
+    unsafeWindow: w,
+  };
+}
+{
+  const dom = new JSDOM(
+    '<!doctype html><body><a id="only" href="/a">A</a><div id="box"><span></span><a href="/b">B</a></div></body>',
+    { url: 'http://127.0.0.1/page' },
+  );
+  const w = dom.window;
+  const sb = domSandbox(dom);
+  vm.createContext(sb);
+  vm.runInContext(readFileSync(join(PK, 'link-table/probe.user.js'), 'utf8'), sb);
+  const doc = w.document;
+  const only = doc.getElementById('only')!;
+  const second = doc.querySelector('#box a')!;
+  const items = (w as unknown as { __browseLinks: { items: { href: string; css: string; xpath: string }[] } }).__browseLinks.items;
+  t.eq('link-table 两条', items.length, 2);
+  t.eq('link-table 唯一 id 的 css', items[0]?.css, cssPath(only));
+  t.eq('link-table 唯一 id 的 xpath', items[0]?.xpath, xpath(only));
+  t.eq('link-table 嵌套 css 与 dompath 一致', items[1]?.css, cssPath(second));
+  t.eq('link-table 嵌套 xpath 与 dompath 一致', items[1]?.xpath, xpath(second));
+  t.ok('link-table css 能找回节点', doc.querySelector(items[1]!.css) === second);
+  t.eq('link-table 锚点写上 css', second.getAttribute('data-browse-css'), items[1]?.css);
+  const found = doc.evaluate(items[1]!.xpath, doc, null, w.XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+  t.ok('link-table xpath 能找回节点', found === second);
+}
+{
+  const dom = new JSDOM('<!doctype html><body><div id="box"><span></span><a class="x" href="/z"></a></div></body>', { url: 'http://127.0.0.1/' });
+  const a = dom.window.document.querySelector('a.x')!;
+  const css = cssPath(a);
+  const xp = xpath(a);
+  t.ok('dompath css 含 nth-child', css.includes('nth-child'));
+  t.ok('dompath css 找回', dom.window.document.querySelector(css) === a);
+  const viaXp = dom.window.document.evaluate(xp, dom.window.document, null, dom.window.XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+  t.ok('dompath xpath 找回', viaXp === a);
+  const withId = dom.window.document.getElementById('box')!;
+  t.eq('dompath 唯一 id 停在 #id', cssPath(withId), '#box');
+  t.eq('dompath 唯一 id 的 xpath', xpath(withId), '//*[@id="box"]');
+}
+{
+  const npProbe = readFileSync(join(PK, 'next-page/probe.user.js'), 'utf8');
+  const dom = new JSDOM('<!doctype html><body><main><a id="nxt" title="Next" href="/p2">Next</a></main></body>', { url: 'http://127.0.0.1/list' });
+  const sb = domSandbox(dom);
+  vm.createContext(sb);
+  vm.runInContext(npProbe, sb);
+  const a = dom.window.document.getElementById('nxt')!;
+  t.eq('next-page 探针盖章', a.getAttribute('data-browse-next'), '1');
+  t.eq('next-page 探针 css', a.getAttribute('data-browse-css'), '#nxt');
+  t.eq('next-page 探针 xpath', a.getAttribute('data-browse-xpath'), '//*[@id="nxt"]');
+  a.removeAttribute('title');
+  a.removeAttribute('data-browse-next');
+  let clicks = 0;
+  a.click = () => { clicks += 1; };
+  const mech = readFileSync(join(PK, 'next-page/mech.rn'), 'utf8');
+  const start = mech.indexOf('(function(){function pick()');
+  const marker = 'return true})()';
+  const end = mech.indexOf(marker);
+  const fn = start >= 0 && end > start ? mech.slice(start, end + marker.length) : '';
+  const hit = Boolean(fn && vm.runInContext(fn, sb));
+  t.ok('next-page 选择器漂了仍点到 css', hit && clicks === 1);
+  a.removeAttribute('data-browse-css');
+  const hold = dom.window.document.createElement('i');
+  hold.setAttribute('data-browse-xpath', '//*[@id="nxt"]');
+  dom.window.document.body.appendChild(hold);
+  clicks = 0;
+  const hitX = Boolean(fn && vm.runInContext(fn, sb));
+  t.ok('next-page xpath 回退仍点到', hitX && clicks === 1);
 }
 
 await new Promise((r) => setTimeout(r, 30)); // 等异步 tap 断言
