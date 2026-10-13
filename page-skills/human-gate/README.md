@@ -1,3 +1,3 @@
 # human-gate
 
-编排需要人裁时 dispatch `browse-human-arm` `{message}`:桌面通知 + 管理页菜单「人工完成 → 放行」。人点菜单或 dispatch `browse-human-done` 后写 `us-human-done` 并上报。mech 一次 await 页内 Promise,不轮询。
+需要人工确认时派发 `browse-human-arm`（`{message}`）：显示桌面通知，并在管理页提供「人工完成 → 放行」。用户选择菜单项或派发 `browse-human-done` 后，写入 `us-human-done` 并上报。`mech.rn` 等待页内 Promise 一次，不轮询。

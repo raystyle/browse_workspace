@@ -1,3 +1,3 @@
 # response-tap
 
-document-start 钩页面 `fetch`/`XHR`(clone 后读),并记下 `window.open`、`WebSocket`、`EventSource` 的 URL。缓冲在 `__browseTap`(单条 256KB,共 2000)。环上只打摘要 `{hit,status,bytes,topKeys}`。过滤:`window.__RT_FILTER`。mech 结束时读走缓冲。源 `build/pairs/response-tap/`。
+在 `document-start` 拦截页面 `fetch` 与 `XHR`（clone 后读取），并记录 `window.open`、`WebSocket`、`EventSource` 的 URL。缓冲位于 `__browseTap`（单条上限 256KB，最多 2000 条）。事件环仅上报摘要 `{hit,status,bytes,topKeys}`。过滤条件为 `window.__RT_FILTER`。`mech.rn` 结束时读取缓冲。源位于 `build/pairs/response-tap/`。

@@ -1,3 +1,3 @@
 # challenge-stop
 
-挑战页识别并停编排。`@detect` 看 turnstile/挑战 DOM/captcha 脚本,出 CONFIRMED。常驻腿看到挑战节点即 `POST /userscript/stop`。晚到的挑战同样停。
+识别挑战页并停止编排。`@detect` 在存在 turnstile、挑战 DOM 或 captcha 脚本时返回 CONFIRMED。运行时若发现挑战节点，则 `POST /userscript/stop`。页面随后出现的挑战同样停止。

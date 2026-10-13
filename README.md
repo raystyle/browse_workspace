@@ -1,59 +1,61 @@
 # browse_workspace
 
-browse 技能仓。每对技能是宿主 `mech.rn` + 页内 `probe.user.js`。README 只给人读。
+browse 技能仓。每项技能包含编排脚本 `mech.rn` 与页内探针 `probe.user.js`。
 
 ## 结构
 
 ```
 page-skills/
-  _prelude.js            # 判定 facts + window.__probe
-  <slug>/mech.rn         # rune 编排
-  <slug>/probe.user.js   # 油猴探针(@detect + 常驻)
-build/                   # 生成器与 TS 源
-  pairs/<slug>/          # 单件对源: probe.head.txt + probe.body.ts + mech.rn
+  _prelude.js            # 判定 facts 与 window.__probe
+  <slug>/mech.rn         # Rune 编排
+  <slug>/probe.user.js   # 油猴探针（含 @detect 与运行时）
+build/                   # 生成器与 TypeScript 源
+  pairs/<slug>/          # 单件源：probe.head.txt、probe.body.ts、mech.rn
 scripts/vendor/          # mdream 钉版
-domain-skills/<段>/      # 域名技能,段 = 域名首段
-scripts/                 # JS 小程序(@实参 + --vars)
+domain-skills/<segment>/ # 域名技能，目录名为域名首段
+scripts/                 # JavaScript 小程序（@ 实参与 --vars）
 ```
 
-google-search 是两段式:`probe.skeleton.user.js`(document-start) + `probe.heavy.user.js`(document-idle,内嵌 mdream)。其余单件对源在 `build/pairs/<slug>/`,`pnpm build` 写出 `page-skills/`。antibot-vendor 与 gm-bridge 手写,不经生成器。
+google-search 为两段式探针：`probe.skeleton.user.js`（`document-start`）与 `probe.heavy.user.js`（`document-idle`，内嵌 mdream）。其余单件由 `pnpm build` 从 `build/pairs/<slug>/` 生成到 `page-skills/`。antibot-vendor 与 gm-bridge 为手写源，不经生成器。
 
-## browse 怎么用
+## 命令
 
-- 判定：`goto` / `detect` 拼各对 `@detect` 与 `_prelude.js`，一次主世界求值。两段式的 detect 在 skeleton。
-- 读说明：`browse workspace page <slug>` / `site <段>`
-- 跑编排：`browse rune page-skills/<slug>/mech.rn`
-- 装探针：`browse userscript install <file...> --restart`
-- 读事件：`browse events`
+| 用途 | 命令 |
+| --- | --- |
+| 页面判定 | `goto` / `detect` 拼接各技能的 `@detect` 与 `_prelude.js`，在主世界求值一次。两段式技能的 `@detect` 位于 skeleton |
+| 查看说明 | `browse workspace page <slug>`；`browse workspace site <segment>` |
+| 运行编排 | `browse rune page-skills/<slug>/mech.rn` |
+| 安装探针 | `browse userscript install <file...> --restart` |
+| 读取事件 | `browse events` |
 
 ## 事件与 cta
 
-探针经 `GM_xmlhttpRequest` 上报 daemon。页面 `fetch` 会被 CORS 拦住。端口为安装时替换的 `%%BROWSE_PORT%%`，未替换则 `9880`。
+探针通过 `GM_xmlhttpRequest` 向 daemon 上报。页面 `fetch` 受 CORS 限制。端口为安装时替换的 `%%BROWSE_PORT%%`；未替换时为 `9880`。
 
 ### 上报
 
 | 端点 | 作用 | 请求体 |
 | --- | --- | --- |
 | `POST /events` | 观察（`type: see`） | `{type, slug, url, data, action}` |
-| `POST /userscript/stop` | 打断正在执行的 `mech.rn` | `{slug, url, data}` |
+| `POST /userscript/stop` | 中断正在执行的 `mech.rn` | `{slug, url, data}` |
 
-`action` 只允许 `read`、`rune`、`export`。探针不得自带命令文本。`stop` 不关浏览器、不关 daemon、不清事件环；无在跑的 rune 时入环并返回 `stopped: false`。
+`action` 仅允许 `read`、`rune`、`export`。探针不得在请求中携带命令文本。`stop` 不关闭浏览器、不关闭 daemon、不清空事件环。若当前没有正在执行的 rune，事件入环并返回 `stopped: false`。
 
-`window.__probe`（`_prelude.js`）提供同一套接口：
+`window.__probe`（定义于 `_prelude.js`）提供下列接口：
 
 | 方法 | 作用 |
 | --- | --- |
 | `R.see({slug, action, data, once, throttleMs})` | `POST /events` |
 | `R.stop(slug, data)` | `POST /userscript/stop` |
-| `R.tap(name, fn)` | 页内拦截 `fetch` / `XHR`，回调 `{url, body, status, kind}`，不上报 daemon |
-| `R.route(fn)` | 页内监听 `pushState` / `replaceState` / `popstate` / `hashchange`，回调 `{kind}`，并清空 see 去重表 |
+| `R.tap(name, fn)` | 在页内拦截 `fetch` / `XHR`，回调 `{url, body, status, kind}`，不上报 daemon |
+| `R.route(fn)` | 在页内监听 `pushState` / `replaceState` / `popstate` / `hashchange`，回调 `{kind}`，并清空 see 去重表 |
 | `R.rearm()` | 清空 see 去重表 |
 
-判定拼批在 `goto` 之后把 `__probe` 放进主世界。`document-start` 探针若更早执行，可等到 `__probe` 再登记。部分探针直接 `GM_xmlhttpRequest`，不经过 `R.see`。
+`goto` 完成后，判定批处理将 `__probe` 注入主世界。若探针以 `document-start` 运行且早于该注入，应等待 `__probe` 可用后再登记。部分探针直接调用 `GM_xmlhttpRequest`，不经过 `R.see`。
 
-### cta 何时出现
+### cta 生成条件
 
-daemon 按 `slug` + `action` 生成 `cta`：
+daemon 根据 `slug` 与 `action` 生成 `cta`：
 
 | action | cta |
 | --- | --- |
@@ -61,40 +63,40 @@ daemon 按 `slug` + `action` 生成 `cta`：
 | `rune` | `browse rune page-skills/<slug>/mech.rn` |
 | `export` | `browse rune page-skills/<slug>/mech.rn` |
 
-仅下列 slug 会生成 cta。其余事件仍入环，不含 `cta` 字段：
+仅下列 slug 生成 `cta`。其他事件仍写入事件环，但不含 `cta` 字段：
 
 `response-tap`、`scroll-until-end`、`next-page`、`spa-route`、`link-table`、`challenge-stop`、`antibot-vendor`、`fingerprint-watch`、`policy-surface`
 
-缺 `action`、非法 `action`、名单外 slug：事件保留，无 cta。`google-search`、`x-search`、`gm-bridge`、`human-gate` 不在名单内。
+缺少 `action`、`action` 非法、或 slug 不在上列：事件保留，无 `cta`。`google-search`、`x-search`、`gm-bridge`、`human-gate` 不在上列。
 
-同一 `(slug, action)` 在 2 秒内重复的 see 不入环，回 `{ok: true, throttled: true}`。`R.see` 默认再按 `slug|action|pathname` 去重；`R.route` 换路径后可再报。
+同一 `(slug, action)` 在 2 秒内重复的 see 不入环，响应为 `{ok: true, throttled: true}`。`R.see` 默认按 `slug|action|pathname` 去重；`R.route` 在路径变更后允许再次上报。
 
 ### 消费
 
-`browse events` 对应 `GET /events`，回执：
+`browse events` 对应 `GET /events`：
 
 | 字段 | 含义 |
 | --- | --- |
-| `events` | 环内事件。每条可含 `cta` |
-| `next` | 当前最高优先建议。`challenge-stop` 等优先于采集技能；同级取最新 |
-| `nextSeq` | 下一轮 `since` 游标 |
+| `events` | 事件列表。条目可含 `cta` |
+| `next` | 当前最高优先级建议。`challenge-stop` 优先于采集类技能；同级取最新 |
+| `nextSeq` | 下一轮查询的 `since` 游标 |
 
-`stop` 无 cta。环容量 1000。
+`stop` 不含 `cta`。事件环容量为 1000。
 
 ### goto / detect 回执
 
-`@detect` 返回 `{slug, confidence}`，`confidence` 为 `CONFIRMED` 或 `PLAUSIBLE`。slug 在上表时，回执附加：
+`@detect` 返回 `{slug, confidence}`，`confidence` 为 `CONFIRMED` 或 `PLAUSIBLE`。当 slug 属于上列时，回执附加：
 
 - `page_skills`：命中列表
 - `page_skills_hint`：`browse workspace page <slug>（跑:browse rune page-skills/<slug>/mech.rn）`
 
-与事件环独立。名单外 slug 不会被自动点名。
+该回执与事件环相互独立。不在上列的 slug 不会出现在回执提示中。
 
-## probe 约定
+## 探针约定
 
-- 头：`@match`、`@connect 127.0.0.1`、`@grant GM_xmlhttpRequest`、`@run-at`
-- `@detect` 返回 `{slug, confidence}` 或 `null`；不改 DOM、不发请求
-- 大结果留页面内存，mech 用 `cdp::js` 读走
+Userscript 元数据须包含 `@match`、`@connect 127.0.0.1`、`@grant GM_xmlhttpRequest`、`@run-at`。
+
+`@detect` 返回 `{slug, confidence}` 或 `null`，且不得修改 DOM、不得发起网络请求。体积较大的结果保存在页面内存中，由 `mech.rn` 通过 `cdp::js` 读取。
 
 ## 技能
 
@@ -116,4 +118,4 @@ daemon 按 `slug` + `action` 生成 `cta`：
 
 ## 测试
 
-`pnpm check`、`pnpm facts`、`pnpm typecheck`。夹具在 `tests/fixtures/`。
+`pnpm check`、`pnpm facts`、`pnpm typecheck`。测试数据位于 `tests/fixtures/`。
