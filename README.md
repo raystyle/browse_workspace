@@ -4,7 +4,7 @@ browse 技能仓。每项技能由 Rune 编排脚本 `mech.rn` 与页内探针 `
 
 browse 驾驶面分三层：命令方言提供单步原语（不含控制流）；Rune 提供图灵完备编排；命令从 stdin 读取脚本或参数。本仓提供 Rune 脚本与探针。
 
-`mech.rn` 入口为 `pub async fn main() -> Result`，可循环、分支、异步等待，通过 `cdp::goto`、`cdp::js`、`cdp::raw`、`cdp::dialect` 操作浏览器。探针负责页内观察与事件。
+`mech.rn` 入口为 `pub async fn main() -> Result`，可循环、分支、异步等待。原生 CDP：`cdp::raw("Domain.method", params)`（652 个方法）。封装：`cdp::goto`、`cdp::js`、`cdp::dialect`（含等待与错误处理）。探针负责页内观察与事件。
 
 ```bash
 browse rune page-skills/<slug>/mech.rn --vars k=v
