@@ -126,7 +126,7 @@ slug 属于 cta 白名单时，回执附加：
 
 ## 探针约定
 
-Userscript 元数据须包含 `@match`、`@connect 127.0.0.1`、`@grant GM_xmlhttpRequest`、`@run-at`。
+探针按油猴脚本标准实现，文件为 `.user.js`。须含 `// ==UserScript==` 元数据：`@match`、`@connect 127.0.0.1`、`@grant GM_xmlhttpRequest`、`@run-at`。引擎按该标准注入与授权 GM_*。
 
 `@detect` 返回 `{slug, confidence}` 或 `null`，且不得修改 DOM、不得发起网络请求。体积较大的结果保存在页面内存中，由 `mech.rn` 通过 `cdp::js` 读取。
 
