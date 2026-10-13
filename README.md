@@ -1,6 +1,12 @@
 # browse_workspace
 
-browse 技能仓。每项技能包含编排脚本 `mech.rn` 与页内探针 `probe.user.js`。
+browse 技能仓。每项技能由 Rune 编排脚本 `mech.rn` 与页内探针 `probe.user.js` 成对构成。
+
+`mech.rn` 是图灵完备的浏览器操作脚本：入口为 `pub async fn main() -> Result`，可循环、分支、异步等待，通过 `cdp::goto`、`cdp::js`、`cdp::raw`、`cdp::dialect` 驱动页面。探针负责页内观察与事件；多步决策与控制流写在 Rune，由 `browse rune` 执行。
+
+```bash
+browse rune page-skills/<slug>/mech.rn --vars k=v
+```
 
 ## 结构
 
