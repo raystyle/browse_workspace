@@ -2,11 +2,20 @@
 
 browse 技能仓。每项技能由 Rune 编排脚本 `mech.rn` 与页内探针 `probe.user.js` 成对构成。
 
-`mech.rn` 是图灵完备的浏览器操作脚本：入口为 `pub async fn main() -> Result`，可循环、分支、异步等待，通过 `cdp::goto`、`cdp::js`、`cdp::raw`、`cdp::dialect` 驱动页面。探针负责页内观察与事件；多步决策与控制流写在 Rune，由 `browse rune` 执行。
+browse 驾驶面分三层：命令方言提供单步原语（不含控制流）；Rune 提供图灵完备编排；命令从 stdin 读取脚本或参数。本仓提供 Rune 脚本与探针。
+
+`mech.rn` 入口为 `pub async fn main() -> Result`，可循环、分支、异步等待，通过 `cdp::goto`、`cdp::js`、`cdp::raw`、`cdp::dialect` 操作浏览器。探针负责页内观察与事件。
 
 ```bash
 browse rune page-skills/<slug>/mech.rn --vars k=v
+cat plan.rn | browse rune
 ```
+
+## 模板变量
+
+`--vars k=v` 可重复。与 `@` 脚本路径同用，或直接作用于含槽位的 `mech.rn`。按 Jinja 渲染，默认定界 `<%= 键 %>`（`--vars-syntax classic` 为 `{{ 键 }}`）。未提供的键在执行前以退出码 2 拒绝。值均为字符串。
+
+示例：`<%= q %>`、`<%= rounds | default(2) %>`。
 
 ## 结构
 
@@ -14,7 +23,7 @@ browse rune page-skills/<slug>/mech.rn --vars k=v
 page-skills/
   _prelude.js            # 判定 facts 与 window.__probe
   <slug>/mech.rn         # Rune 编排
-  <slug>/probe.user.js   # 油猴探针（含 @detect 与运行时）
+  <slug>/probe.user.js   # userscript 探针（含 @detect 与运行时）
 build/                   # 生成器与 TypeScript 源
   pairs/<slug>/          # 单件源：probe.head.txt、probe.body.ts、mech.rn
 scripts/vendor/          # mdream 钉版
@@ -89,14 +98,31 @@ daemon 根据 `slug` 与 `action` 生成 `cta`：
 
 `stop` 不含 `cta`。事件环容量为 1000。
 
-### goto / detect 回执
+### 域名段（`goto` / `fetch`）
 
-`@detect` 返回 `{slug, confidence}`，`confidence` 为 `CONFIRMED` 或 `PLAUSIBLE`。当 slug 属于上列时，回执附加：
+从 URL 取 host，去掉 `www.` 前缀，再取第一段作为域名段。例如 `https://www.x.com/a` → `x`。仅 `http`/`https` 参与匹配。
 
-- `page_skills`：命中列表
-- `page_skills_hint`：`browse workspace page <slug>（跑:browse rune page-skills/<slug>/mech.rn）`
+若技能仓存在 `domain-skills/<段>/`，且其中文件成对（`mech.rn` 与 `probe.user.js`），回执附加：
 
-该回执与事件环相互独立。不在上列的 slug 不会出现在回执提示中。
+| 字段 | 内容 |
+| --- | --- |
+| `domain_skills` | 该段目录下的文件名列表 |
+| `domain_skills_hint` | `browse workspace site <段>` |
+
+`fetch` 在 CLI 侧按 URL 匹配，不依赖引擎。`BROWSE_DOMAIN_SKILLS=0` 时不附加。目录不存在或不成对则不附加。
+
+### 页面 slug（`goto` / `detect`）
+
+`goto` 后将各探针 `@detect` 与 `_prelude.js` 拼成一次主世界求值。`@detect` 返回 `{slug, confidence}`，`confidence` 为 `CONFIRMED` 或 `PLAUSIBLE`。`detect()` 的 `challenged` 判读映射为 `challenge-stop`（PLAUSIBLE）。
+
+slug 属于 cta 白名单时，回执附加：
+
+| 字段 | 内容 |
+| --- | --- |
+| `page_skills` | 命中列表 |
+| `page_skills_hint` | `browse workspace page <slug>（跑:browse rune page-skills/<slug>/mech.rn）` |
+
+`BROWSE_PAGE_SKILLS=0` 时不附加。白名单外的 slug 不出现在回执中。域名段提示、页面 slug 提示、事件环 `cta` 三者相互独立。
 
 ## 探针约定
 
