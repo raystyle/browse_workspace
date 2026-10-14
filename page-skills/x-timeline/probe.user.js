@@ -15,7 +15,7 @@ function browseDetect(facts) {
 (function () {
   if (window.__xTimelineProbe) return;
   window.__xTimelineProbe = 1;
-  var REV = 'x-timeline/2';
+  var REV = 'x-timeline/3';
   var CAP = 80;
   function tabOf() {
     var tabs = document.querySelectorAll('[role=tab]');
@@ -45,12 +45,20 @@ function browseDetect(facts) {
       if (!id || seen[id]) continue;
       seen[id] = 1;
       var user = href.split('/')[1] || '';
+      var links = [];
+      var outLinks = a.querySelectorAll('a[href^="http"]');
+      for (var q = 0; q < outLinks.length && links.length < 2; q++) {
+        var oh = (outLinks[q].getAttribute('href') || '').split('?')[0];
+        if (oh.indexOf('https://x.com') === 0 || oh.indexOf('https://twitter.com') === 0) continue;
+        if (/^https:\/\/(t\.co|bit\.ly)\//.test(oh)) continue;
+        links.push(oh);
+      }
       var timeEl = a.querySelector('time');
       var time = timeEl ? (timeEl.getAttribute('datetime') || '') : '';
       var tt = a.querySelector('[data-testid=tweetText]');
       var raw = tt ? (tt.textContent || '') : (a.textContent || '');
       var text = raw.replace(/\s+/g, ' ').trim().slice(0, 280);
-      posts.push({ id: id, href: 'https://x.com' + href, user: user, text: text, time: time });
+      posts.push({ id: id, href: 'https://x.com' + href, user: user, text: text, time: time, links: links });
     }
     return posts;
   }
