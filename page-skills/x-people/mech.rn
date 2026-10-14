@@ -1,0 +1,139 @@
+// x-people 宿主编排:单个人员主页 bio 抽取(goto 自愈 + 探针 settled 轮询 + 如实回执)。
+// 活动 tab 由调度层(people-flow.mjs)保证为人员专用 tab;本 mech 不开不关 tab。
+// 用法:browse rune page-skills/x-people/mech.rn --vars h=<handle> [--timeout 90]
+// verdict:ok(bio 或 name 到手) / empty(页在但无 bio) / net(网络失败) / timeout(等待窗尽)
+pub async fn main() {
+    let h = "<%= h %>";
+    fn esc(s) {
+        return s.replace("\r", " ").replace("\n", " ").replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+    fn receipt(verdict, h, name, bio, msg) {
+        return "{\"slug\":\"x-people\",\"h\":\"" + esc(h) + "\",\"verdict\":\"" + verdict + "\",\"name\":" + (name == "" ? "null" : "\"" + esc(name) + "\"") + ",\"bio\":" + (bio == "" ? "null" : "\"" + esc(bio) + "\"") + ",\"message\":\"" + esc(msg) + "\"}";
+    }
+    let probe_src = r#"(function () {
+  if (window.__xPeopleProbe) { return 1; }
+  window.__xPeopleProbe = 1;
+  var REV = 'x-people/1';
+  function profileHandle() {
+    var p = (location.pathname || '').split('/');
+    return p.length > 1 && p[1] && p[1].indexOf('/') === -1 ? p[1] : '';
+  }
+  function collect() {
+    var n = document.querySelector('div[data-testid=UserName]');
+    var b = document.querySelector('div[data-testid=UserDescription]');
+    var fl = document.querySelector('a[href$="/verified_followers"], a[href$="/followers"]');
+    return {
+      handle: profileHandle(),
+      name: n ? (n.innerText || '').split('\n')[0].trim() : null,
+      bio: b ? (b.innerText || '').trim().slice(0, 300) : null,
+      followers: fl ? (fl.innerText || '').trim().split('\n')[0] : null
+    };
+  }
+  function publish() {
+    var c = collect();
+    var settled = !!(c.name || c.bio) || (location.pathname || '') === '/';
+    var payload = { slug: 'x-people', rev: REV, settled: settled, href: location.href, c: c, at: Date.now() };
+    document.documentElement.setAttribute('probe', JSON.stringify(payload));
+  }
+  var timer = 0;
+  function schedule() {
+    if (timer) return;
+    timer = window.setTimeout(function () { timer = 0; publish(); }, 150);
+  }
+  publish();
+  var root = document.body || document.documentElement;
+  var mo = new MutationObserver(schedule);
+  mo.observe(root, { childList: true, subtree: true });
+  return 1;
+})();
+return 1;"#;
+    let u = "https://x.com/" + h;
+    let heals = 0;
+    let opened = 0;
+    let net_msg = "";
+    while opened == 0 && heals < 3 {
+        match cdp::goto(u.clone()).await {
+            Ok(_) => { opened = 1; },
+            Err(e) => {
+                net_msg = e.message;
+                heals = heals + 1;
+                if heals < 3 {
+                    time::sleep(time::Duration::from_millis(800)).await;
+                }
+            }
+        }
+    }
+    if opened == 0 {
+        return Ok(receipt("net", h, "", "", net_msg));
+    }
+    let _ = cdp::js(probe_src.clone(), #{}).await;
+    let i = 0;
+    let got = "";
+    while i < 40 {
+        if got == "" {
+            let tick = match cdp::js(r#"function tick(args) {
+  function isNet() {
+    var href = String(location.href || '');
+    if (href.indexOf('chrome-error://') === 0) return true;
+    if (document.getElementById('main-frame-error') || document.querySelector('.neterror')) return true;
+    return false;
+  }
+  if (isNet()) return 'NET';
+  try {
+    var p = JSON.parse(document.documentElement.getAttribute('probe') || 'null');
+    if (p && p.slug === 'x-people' && p.settled && p.c) {
+      if (p.c.handle !== String(args.h || '')) return 'WAIT';
+      return 'READY' + (document.documentElement.getAttribute('probe') || 'null');
+    }
+  } catch (e) { }
+  return 'WAIT';
+}
+return tick(args);"#, #{"h" : h.clone()}).await {
+                Ok(v) => v,
+                Err(_) => "WAIT",
+            };
+            if tick == "NET" {
+                if heals >= 2 {
+                    return Ok(receipt("net", h, "", "", "page net error"));
+                }
+                heals = heals + 1;
+                match cdp::goto(u.clone()).await {
+                    Ok(_) => (),
+                    Err(e) => { net_msg = e.message; },
+                }
+                time::sleep(time::Duration::from_millis(800)).await;
+            } else if tick.starts_with("READY") {
+                got = tick.replace("READY", "");
+                if got == "null" { got = ""; }
+            }
+        }
+        if got == "" {
+            time::sleep(time::Duration::from_millis(250)).await;
+        }
+        i = i + 1;
+    }
+    if got == "" {
+        return Ok(receipt("timeout", h, "", "", "等待窗内探针未 settle"));
+    }
+    let packed = match cdp::js(r#"function pack(args) {
+  var p = null;
+  try { p = JSON.parse(args.snap || 'null'); } catch (e) { p = null; }
+  if (!p || !p.c) return JSON.stringify({ slug: 'x-people', h: String(args.h || ''), verdict: 'empty', name: null, bio: null, message: 'probe payload missing' });
+  var name = p.c.name || '';
+  var bio = p.c.bio || '';
+  return JSON.stringify({
+    slug: 'x-people',
+    h: p.c.handle || String(args.h || ''),
+    verdict: (name || bio) ? 'ok' : 'empty',
+    name: name || null,
+    bio: bio || null,
+    followers: p.c.followers || null,
+    message: ''
+  });
+}
+return pack(args);"#, #{"snap" : got.clone(), "h" : h.clone()}).await {
+        Ok(v) => v,
+        Err(e) => { return Ok(receipt("error", h, "", "", e.message)); }
+    };
+    Ok(packed)
+}
