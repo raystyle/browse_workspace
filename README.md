@@ -33,7 +33,7 @@ domain-skills/<segment>/ # 域名技能，目录名为域名首段
 scripts/                 # JavaScript 小程序（@ 实参与 --vars）
 ```
 
-google-search 为两段式探针：`probe.skeleton.user.js`（`document-start`）与 `probe.heavy.user.js`（`document-idle`，内嵌 mdream）。其余单件由 `pnpm build` 从 `build/pairs/<slug>/` 生成到 `page-skills/`。antibot-vendor 与 gm-bridge 为手写源，不经生成器。
+google-search 为两段式探针：`probe.skeleton.user.js`（`document-start`）与 `probe.heavy.user.js`（`document-idle`，内嵌 mdream）。其余单件由 `pnpm build` 从 `build/pairs/<slug>/` 生成到 `page-skills/`。antibot-vendor、gm-bridge 与 x-timeline 为手写源，不经生成器。
 
 ## 知识面与可执行对共存
 
@@ -160,6 +160,7 @@ slug 属于 cta 白名单时，回执附加：
 | scroll-until-end | 滚动至无新增内容 |
 | spa-route | 监听 `pushState`、`replaceState`、`popstate`、`hashchange` |
 | x-search | x.com 实时搜索 |
+| x-timeline | x.com 首页时间线情报收割（自愈重载、滚动停稳早停、轮次合并去重） |
 
 ## 测试
 

@@ -24,11 +24,20 @@ const slugs = readdirSync(PK, { withFileTypes: true })
   .filter((e) => e.isDirectory())
   .map((e) => e.name)
   .sort();
-t.eq('十三对在册', slugs, [
+t.eq('十四对在册', slugs, [
   'antibot-vendor', 'challenge-stop', 'fingerprint-watch', 'gm-bridge',
   'google-search', 'human-gate', 'link-table', 'next-page', 'policy-surface',
-  'response-tap', 'scroll-until-end', 'spa-route', 'x-search',
+  'response-tap', 'scroll-until-end', 'spa-route', 'x-search', 'x-timeline',
 ]);
+// 手写对 x-timeline:mech 内嵌探针体与 probe.user.js 以 REV 钉版同源(双件漂移守卫)
+{
+  const xtProbe = readFileSync(join(PK, 'x-timeline/probe.user.js'), 'utf8');
+  const xtMech = readFileSync(join(PK, 'x-timeline/mech.rn'), 'utf8');
+  const rev = (xtProbe.match(/var REV = '([^']+)'/) ?? [])[1] ?? '';
+  t.ok('x-timeline: 探针 REV 在册', rev.startsWith('x-timeline/'), rev);
+  t.ok('x-timeline: mech 内嵌探针体与探针件 REV 同源', xtMech.includes("var REV = '" + rev + "'"), rev);
+  t.ok('x-timeline: 手写对无生成头(勿混入编译道)', !xtProbe.includes('本文件是生成物'));
+}
 // 两段式探针对(skeleton+heavy 双件)按存在性识别;单件对沿用 probe.user.js(REQ-041 P0)
 function probeFiles(slug: string): string[] {
   const dir = join(PK, slug);

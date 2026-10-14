@@ -1,0 +1,332 @@
+// x-timeline 宿主编排:首页时间线情报收割,自愈重载 + 滚动停稳早停 + 轮次合并去重。
+// 用法:browse rune page-skills/x-timeline/mech.rn [--vars rounds=2] [--vars steps=18] [--timeout 240]
+// rounds 缺省 2 上限 4;steps 缺省 18 上限 40。探针体自注入(v0.31 无油猴安装面),REV 与 probe.user.js 钉版同源。
+// 网络错误(net:: / chrome-error / 页内「出错了」)最多再开两次,仍失败回 verdict=net,不伪装成空结果。
+pub async fn main() {
+    let rounds = <%= rounds | default(2) %>;
+    if rounds < 1 { rounds = 1; }
+    if rounds > 4 { rounds = 4; }
+    let steps = <%= steps | default(18) %>;
+    if steps < 4 { steps = 4; }
+    if steps > 40 { steps = 40; }
+    fn esc(s) {
+        return s.replace("\r", " ").replace("\n", " ").replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+    fn fail1(stage, op, message) {
+        let m = esc(message);
+        return "{\"probe\":{\"slug\":\"x-timeline\",\"verdict\":\"error\",\"settled\":false,\"posts\":[]},\"posts\":[],\"rounds\":0,\"steps\":0,\"fresh\":0,\"errors\":[{\"stage\":\"" + stage + "\",\"op\":\"" + op + "\",\"message\":\"" + m + "\"}]}";
+    }
+    fn netfail(message) {
+        let m = esc(message);
+        return "{\"probe\":{\"slug\":\"x-timeline\",\"verdict\":\"net\",\"settled\":false,\"posts\":[]},\"posts\":[],\"rounds\":0,\"steps\":0,\"fresh\":0,\"errors\":[{\"stage\":\"home\",\"op\":\"net\",\"message\":\"" + m + "\"}]}";
+    }
+    let probe_src = r#"(function () {
+  if (window.__xTimelineProbe) { return 1; }
+  window.__xTimelineProbe = 1;
+  var REV = 'x-timeline/1';
+  var CAP = 80;
+  function tabOf() {
+    var tabs = document.querySelectorAll('[role=tab]');
+    for (var i = 0; i < tabs.length; i++) {
+      if (tabs[i].getAttribute('aria-selected') === 'true') return (tabs[i].innerText || '').trim();
+    }
+    return '';
+  }
+  function isLogin() {
+    var path = location.pathname || '';
+    return path.indexOf('/i/jf/') === 0 || path.indexOf('/i/flow/login') === 0 || path.indexOf('/login') === 0;
+  }
+  function collectPosts() {
+    var posts = [];
+    var seen = {};
+    var arts = document.querySelectorAll('article');
+    for (var i = 0; i < arts.length && posts.length < CAP; i++) {
+      var a = arts[i];
+      var id = '';
+      var href = '';
+      var statusLinks = a.querySelectorAll('a[href*="/status/"]');
+      for (var j = 0; j < statusLinks.length; j++) {
+        var h = (statusLinks[j].getAttribute('href') || '').split('?')[0];
+        var m = h.match(/\/status\/(\d+)$/);
+        if (m) { id = m[1]; href = h; break; }
+      }
+      if (!id || seen[id]) continue;
+      seen[id] = 1;
+      var user = '';
+      var anchors = a.querySelectorAll('a[href]');
+      for (var k = 0; k < anchors.length; k++) {
+        var hh = (anchors[k].getAttribute('href') || '').split('?')[0];
+        if (/^\/[A-Za-z0-9_]{1,15}$/.test(hh)) { user = hh.slice(1); break; }
+      }
+      var timeEl = a.querySelector('time');
+      var time = timeEl ? (timeEl.getAttribute('datetime') || '') : '';
+      var tt = a.querySelector('[data-testid=tweetText]');
+      var raw = tt ? (tt.textContent || '') : (a.textContent || '');
+      var text = raw.replace(/\s+/g, ' ').trim().slice(0, 280);
+      posts.push({ id: id, href: 'https://x.com' + href, user: user, text: text, time: time });
+    }
+    return posts;
+  }
+  function publish() {
+    var login = isLogin();
+    var posts = login ? [] : collectPosts();
+    var onHome = (location.pathname || '').indexOf('/home') === 0;
+    var verdict = 'idle';
+    if (login) verdict = 'login';
+    else if (posts.length) verdict = 'ok';
+    else if (onHome) verdict = 'empty';
+    var payload = {
+      slug: 'x-timeline',
+      rev: REV,
+      verdict: verdict,
+      settled: login || posts.length > 0,
+      href: location.href,
+      tab: tabOf(),
+      arts: document.querySelectorAll('article').length,
+      docSh: document.documentElement.scrollHeight,
+      posts: posts,
+      at: Date.now()
+    };
+    document.documentElement.setAttribute('probe', JSON.stringify(payload));
+  }
+  var timer = 0;
+  function schedule() {
+    if (timer) return;
+    timer = window.setTimeout(function () { timer = 0; publish(); }, 150);
+  }
+  publish();
+  var root = document.body || document.documentElement;
+  var mo = new MutationObserver(schedule);
+  mo.observe(root, { childList: true, subtree: true });
+  return 1;
+})();
+return 1;"#;
+    match cdp::js("return 1", #{}).await {
+        Ok(_) => (),
+        Err(_) => { let _t = cdp::dialect("newTab", "").await; }
+    }
+    let url = "https://x.com/home";
+    let heals = 0;
+    let opened = 0;
+    let net_msg = "";
+    while opened == 0 && heals < 3 {
+        match cdp::goto(url).await {
+            Ok(_) => { opened = 1; },
+            Err(e) => {
+                net_msg = e.message;
+                heals = heals + 1;
+                if heals < 3 {
+                    time::sleep(time::Duration::from_millis(800)).await;
+                }
+            }
+        }
+    }
+    if opened == 0 {
+        return Ok(netfail(net_msg));
+    }
+    let n = 0;
+    let timeouts = 0;
+    let since = 0;
+    let acc = "[]";
+    let first = "[]";
+    let steps_used = 0;
+    while n < rounds {
+        let _ = cdp::js(probe_src, #{}).await;
+        let i = 0;
+        let got = "";
+        while i < 40 {
+            if got == "" {
+                let tick = match cdp::js(r#"function tick(args) {
+  function isNet() {
+    var href = String(location.href || '');
+    if (href.indexOf('chrome-error://') === 0) return true;
+    if (document.getElementById('main-frame-error') || document.querySelector('.neterror')) return true;
+    return false;
+  }
+  function xAppNet() {
+    if (document.querySelectorAll('article').length > 0) return '';
+    var col = document.querySelector('[data-testid=primaryColumn]');
+    var flat = (col ? col.innerText || '' : '').replace(/\s+/g, ' ').trim();
+    if (flat.indexOf('出错了') >= 0 || flat.indexOf('Something went wrong') >= 0) return flat.slice(0, 180);
+    return '';
+  }
+  function isLogin() {
+    var path = location.pathname || '';
+    return path.indexOf('/i/jf/') === 0 || path.indexOf('/i/flow/login') === 0 || path.indexOf('/login') === 0;
+  }
+  function readProbe() {
+    try {
+      return JSON.parse(document.documentElement.getAttribute('probe') || 'null');
+    } catch (e) {
+      return null;
+    }
+  }
+  if (isNet()) {
+    var codeEl = document.querySelector('.error-code');
+    var code = codeEl ? (codeEl.textContent || '').replace(/\s+/g, ' ').trim() : '';
+    return 'NET' + JSON.stringify({ net: code || 'chrome-error' });
+  }
+  if (isLogin()) {
+    return 'LOGIN' + JSON.stringify({ login: 1 });
+  }
+  if ((location.pathname || '').indexOf('/home') !== 0) return 'WAIT';
+  var xe = xAppNet();
+  if (xe) return 'NET' + JSON.stringify({ net: xe });
+  var p = readProbe();
+  if (!p || !p.settled || !p.posts || !p.posts.length) return 'WAIT';
+  if (!p.at || Number(p.at) <= Number(args.since || 0)) return 'WAIT';
+  return 'READY' + (document.documentElement.getAttribute('probe') || 'null');
+}
+return tick(args);"#, #{"since" : since}).await {
+                    Ok(v) => v,
+                    Err(_) => "WAIT",
+                };
+                if tick.starts_with("LOGIN") {
+                    return Ok("{\"probe\":{\"slug\":\"x-timeline\",\"verdict\":\"login\",\"settled\":false,\"posts\":[]},\"posts\":[],\"rounds\":0,\"steps\":0,\"fresh\":0,\"errors\":[{\"stage\":\"home\",\"op\":\"login\",\"message\":\"x.com 要登录,当前 profile 没有可用会话\"}]}");
+                } else if tick.starts_with("NET") {
+                    let nd = tick.replace("NET", "");
+                    net_msg = nd;
+                    got = "NET";
+                } else if tick.starts_with("READY") {
+                    got = tick.replace("READY", "");
+                    if got == "null" { got = ""; }
+                }
+            }
+            if got == "" {
+                time::sleep(time::Duration::from_millis(250)).await;
+            }
+            i = i + 1;
+        }
+        if got == "NET" {
+            if heals >= 2 {
+                return Ok(netfail(net_msg));
+            }
+            heals = heals + 1;
+            match cdp::goto(url).await {
+                Ok(_) => (),
+                Err(e) => { net_msg = e.message; },
+            }
+            time::sleep(time::Duration::from_millis(800)).await;
+        } else if got != "" {
+            if n == 0 {
+                first = match cdp::js(r#"function firstIds(args) {
+  var snap = null;
+  try { snap = JSON.parse(args.snap || 'null'); } catch (e) { snap = null; }
+  var ids = [];
+  if (snap && snap.posts) {
+    for (var i = 0; i < snap.posts.length; i++) ids.push(snap.posts[i].id);
+  }
+  return JSON.stringify(ids);
+}
+return firstIds(args);"#, #{"snap" : got}).await {
+                    Ok(v) => v,
+                    Err(_) => "[]",
+                };
+            }
+            let s = 0;
+            let stall = 0;
+            let last_sh = 0;
+            while s < steps {
+                let sh = match cdp::js(r#"window.scrollBy(0, 1600); return document.documentElement.scrollHeight"#, #{}).await {
+                    Ok(v) => v,
+                    Err(_) => 0,
+                };
+                time::sleep(time::Duration::from_millis(700)).await;
+                acc = match cdp::js(r#"function absorb(args) {
+  var acc = [];
+  try { acc = JSON.parse(args.acc || '[]') || []; } catch (e) { acc = []; }
+  var add = null;
+  try { add = JSON.parse(document.documentElement.getAttribute('probe') || 'null'); } catch (e) { add = null; }
+  if (add && add.posts) {
+    var seen = {};
+    for (var i = 0; i < acc.length; i++) seen[acc[i].id] = 1;
+    for (var j = 0; j < add.posts.length; j++) {
+      var p = add.posts[j];
+      if (p && p.id && !seen[p.id]) { seen[p.id] = 1; acc.push(p); }
+    }
+  }
+  return JSON.stringify(acc);
+}
+return absorb(args);"#, #{"acc" : acc}).await {
+                    Ok(v) => v,
+                    Err(_) => acc,
+                };
+                if sh == last_sh {
+                    stall = stall + 1;
+                } else {
+                    stall = 0;
+                }
+                last_sh = sh;
+                steps_used = steps_used + 1;
+                if stall >= 4 {
+                    s = steps;
+                } else {
+                    s = s + 1;
+                }
+            }
+            since = match cdp::js(r#"function atOf(args) {
+  try {
+    var p = JSON.parse(document.documentElement.getAttribute('probe') || 'null');
+    return p && p.at ? Number(p.at) : 0;
+  } catch (e) {
+    return 0;
+  }
+}
+return atOf(args);"#, #{}).await {
+                Ok(v) => v,
+                Err(_) => since,
+            };
+            n = n + 1;
+            if n < rounds {
+                match cdp::js("location.reload(); return 1", #{}).await {
+                    Ok(_) => (),
+                    Err(_) => (),
+                }
+                time::sleep(time::Duration::from_millis(500)).await;
+            }
+        } else {
+            timeouts = timeouts + 1;
+            if timeouts >= 2 {
+                return Ok(fail1("home", "timeout", "等待窗内没有推文"));
+            }
+            n = n + 1;
+            if n < rounds {
+                match cdp::js("location.reload(); return 1", #{}).await {
+                    Ok(_) => (),
+                    Err(_) => (),
+                }
+                time::sleep(time::Duration::from_millis(500)).await;
+            }
+        }
+    }
+    let packed = match cdp::js(r#"function pack(args) {
+  var acc = [];
+  try { acc = JSON.parse(args.acc || '[]') || []; } catch (e) { acc = []; }
+  var first = {};
+  try {
+    var f = JSON.parse(args.first || '[]') || [];
+    for (var i = 0; i < f.length; i++) first[f[i]] = 1;
+  } catch (e) {}
+  var posts = [];
+  var fresh = 0;
+  for (var j = 0; j < acc.length; j++) {
+    var p = acc[j];
+    if (!p || !p.id) continue;
+    var isF = !first[p.id];
+    if (isF) fresh += 1;
+    posts.push({ id: p.id, href: p.href, user: p.user, text: p.text, time: p.time, fresh: isF });
+  }
+  posts.sort(function (a, b) { return (b.time || '').localeCompare(a.time || ''); });
+  return JSON.stringify({
+    probe: { slug: 'x-timeline', verdict: posts.length ? 'ok' : 'empty', settled: posts.length > 0, href: 'https://x.com/home', rounds: Number(args.rounds || 0), steps: Number(args.steps || 0) },
+    posts: posts,
+    fresh: fresh,
+    errors: []
+  });
+}
+return pack(args);"#, #{"acc" : acc, "first" : first, "rounds" : rounds, "steps" : steps_used}).await {
+        Ok(v) => v,
+        Err(e) => { return Ok(fail1("pack", "js", e.message)); }
+    };
+    Ok(packed)
+}
