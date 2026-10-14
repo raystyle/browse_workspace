@@ -110,7 +110,7 @@ return 1;"#;
     let opened = 0;
     let net_msg = "";
     while opened == 0 && heals < 3 {
-        match cdp::goto(url).await {
+        match cdp::goto(url.clone()).await {
             Ok(_) => { opened = 1; },
             Err(e) => {
                 net_msg = e.message;
@@ -131,7 +131,7 @@ return 1;"#;
     let first = "[]";
     let steps_used = 0;
     while n < rounds {
-        let _ = cdp::js(probe_src, #{}).await;
+        let _ = cdp::js(probe_src.clone(), #{}).await;
         let i = 0;
         let got = "";
         while i < 40 {
@@ -202,7 +202,7 @@ return tick(args);"#, #{"since" : since}).await {
                 return Ok(netfail(net_msg));
             }
             heals = heals + 1;
-            match cdp::goto(url).await {
+            match cdp::goto(url.clone()).await {
                 Ok(_) => (),
                 Err(e) => { net_msg = e.message; },
             }
@@ -218,7 +218,7 @@ return tick(args);"#, #{"since" : since}).await {
   }
   return JSON.stringify(ids);
 }
-return firstIds(args);"#, #{"snap" : got}).await {
+return firstIds(args);"#, #{"snap" : got.clone()}).await {
                     Ok(v) => v,
                     Err(_) => "[]",
                 };
@@ -247,7 +247,7 @@ return firstIds(args);"#, #{"snap" : got}).await {
   }
   return JSON.stringify(acc);
 }
-return absorb(args);"#, #{"acc" : acc}).await {
+return absorb(args);"#, #{"acc" : acc.clone()}).await {
                     Ok(v) => v,
                     Err(_) => acc,
                 };
@@ -324,7 +324,7 @@ return atOf(args);"#, #{}).await {
     errors: []
   });
 }
-return pack(args);"#, #{"acc" : acc, "first" : first, "rounds" : rounds, "steps" : steps_used}).await {
+return pack(args);"#, #{"acc" : acc.clone(), "first" : first.clone(), "rounds" : rounds, "steps" : steps_used}).await {
         Ok(v) => v,
         Err(e) => { return Ok(fail1("pack", "js", e.message)); }
     };
