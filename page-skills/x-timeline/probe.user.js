@@ -15,7 +15,7 @@ function browseDetect(facts) {
 (function () {
   if (window.__xTimelineProbe) return;
   window.__xTimelineProbe = 1;
-  var REV = 'x-timeline/4';
+  var REV = 'x-timeline/5';
   var CAP = 80;
   function tabOf() {
     var tabs = document.querySelectorAll('[role=tab]');
@@ -58,7 +58,7 @@ function browseDetect(facts) {
       var timeEl = a.querySelector('time');
       var time = timeEl ? (timeEl.getAttribute('datetime') || '') : '';
       var tt = a.querySelector('[data-testid=tweetText]');
-      var raw = tt ? (tt.textContent || '') : (a.textContent || '');
+      var raw = tt ? (tt.textContent || '') : '';
       var text = raw.replace(/\s+/g, ' ').trim().slice(0, 280);
       posts.push({ id: id, href: 'https://x.com' + href, user: user, text: text, time: time, links: links });
     }
