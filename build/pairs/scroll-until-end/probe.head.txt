@@ -1,0 +1,16 @@
+// ==UserScript==
+// @name         scroll-until-end probe
+// @match        *://*/*
+// @connect      127.0.0.1
+// @grant        GM_xmlhttpRequest
+// @run-at       document-idle
+// ==/UserScript==
+/* @detect */
+function browseDetect(facts) {
+  if (facts.viewportHeight > 0 && facts.docHeight >= 4 * facts.viewportHeight) {
+    return { slug: 'scroll-until-end', confidence: 'PLAUSIBLE' };
+  }
+  return null;
+}
+/* @enddetect */
+

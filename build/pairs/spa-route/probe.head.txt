@@ -1,0 +1,17 @@
+// ==UserScript==
+// @name         spa-route probe
+// @match        *://*/*
+// @connect      127.0.0.1
+// @grant        GM_xmlhttpRequest
+// @grant        unsafeWindow
+// @run-at       document-start
+// ==/UserScript==
+/* @detect */
+function browseDetect(facts) {
+  if (facts.framework) {
+    return { slug: 'spa-route', confidence: 'PLAUSIBLE' };
+  }
+  return null;
+}
+/* @enddetect */
+

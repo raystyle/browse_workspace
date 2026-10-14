@@ -17,6 +17,16 @@
 | captcha | recaptcha/hcaptcha/turnstile 特征 | CONFIRMED |
 | service-worker | navigator.serviceWorker.controller | CONFIRMED |
 
+## 扩展 slug(引擎探测未接线,CLI 直读层)
+
+`browse workspace page <slug>` 可读,但 goto 探测不自动点名
+(检测信号待引擎接线后升级为自动层):
+
+| slug | 检测信号(拟) | 来源 |
+| --- | --- | --- |
+| native-form-tamper | 表单含 input[type=hidden](price/quantity/username 类) | PortSwigger 逻辑批 2026-09-29 |
+| exploit-server | 域 exploit-server.net 加 responseHead/responseBody 双 textarea | PortSwigger 投递批 2026-09-29 |
+
 框架名与版本是回执 info 字段（framework: {name, version}），不占 slug；仅当特征导致行为分叉才配 slug（水合窗口期为 next/nuxt/qwik/astro 特有，故 hydration 独立成 slug）。
 
 ## 触发机制

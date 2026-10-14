@@ -1,0 +1,13 @@
+// ==UserScript==
+// @name         fingerprint-watch probe
+// @match        *://*/*
+// @connect      127.0.0.1
+// @grant        GM_xmlhttpRequest
+// @run-at       document-start
+// ==/UserScript==
+/* @detect */
+function browseDetect(facts) {
+  return null; // 观察型无判定腿(指纹 API 在正常页也会跑,不点名)
+}
+/* @enddetect */
+

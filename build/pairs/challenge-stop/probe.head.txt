@@ -1,0 +1,16 @@
+// ==UserScript==
+// @name         challenge-stop probe
+// @match        *://*/*
+// @connect      127.0.0.1
+// @grant        GM_xmlhttpRequest
+// @run-at       document-idle
+// ==/UserScript==
+/* @detect */
+function browseDetect(facts) {
+  if (facts.hasTurnstile || facts.hasChallengeDom || (facts.scriptVendor && (facts.scriptVendor.cloudflare || facts.scriptVendor.recaptcha || facts.scriptVendor.hcaptcha))) {
+    return { slug: 'challenge-stop', confidence: 'CONFIRMED' };
+  }
+  return null;
+}
+/* @enddetect */
+

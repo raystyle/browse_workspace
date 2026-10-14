@@ -1,0 +1,4 @@
+packages: []
+# pnpm 12 默认拦依赖构建脚本(fail-closed);tsx 链 esbuild 为准许面(2026-10-10 con-06)
+allowBuilds:
+  esbuild: true

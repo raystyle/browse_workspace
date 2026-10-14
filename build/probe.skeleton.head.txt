@@ -1,0 +1,18 @@
+// ==UserScript==
+// @name         google-search probe
+// @match        *://www.google.com/search*
+// @connect      127.0.0.1
+// @grant        GM_xmlhttpRequest
+// @run-at       document-start
+// ==/UserScript==
+// 本文件是生成物(build/build.mts 产;源 build/probe.skeleton.ts + build/contracts.ts),勿手改。
+// 两段式骨架段(REQ-041 P0 / gr01-R3):KB 级 document-start 采样与收齐引擎,唯一判读方;
+// mdream 富集归重段 probe.heavy.user.js(@run-at document-idle),写回同一 probe attr。
+/* @detect */
+function browseDetect(facts) {
+  if (facts.isGoogleSerp && (facts.hasTurnstile || facts.hasChallengeDom)) {
+    return { slug: 'google-search', confidence: 'PLAUSIBLE' };
+  }
+  return null;
+}
+/* @enddetect */

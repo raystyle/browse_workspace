@@ -1,0 +1,234 @@
+// google-search 宿主编排(生成物:build/build.mts 渲染;源 build/mech.bodies.ts + build/contracts.ts,勿手改)
+// 快取 SERP 结果(指纹收齐事件驱动)+ cdp 开标签并行访问结果页取渲染内容,单 JSON 返回。
+// 用法:browse rune page-skills/google-search/mech.rn --vars q=<查询词> --vars top=5 [--vars mode=serp|follow]
+// mode(P1 件2):serp=现行为(缺省);follow=跟进访问结果页,内容两拍稳提取+导航预算(1 SERP+≤5 goto,超限 verdict=budget)。
+// 三要素:事件驱动(settled attr 观察/readystatechange/两拍稳采样/回调即走)、原子错误(失败面单 JSON 证据面,
+// 已收数据永不因后续段失败而丢)、超时兜底(全等待段帽,见 build/contracts.ts CAPS)。
+// 容错自愈:开机会话愈(跨轮死会话 newTab 重建)、probe 未现刷新愈一轮、瞬态错重试、单页错落记录。
+pub async fn main() {
+    let q = "<%= q %>";
+    let top = <%= top %>;
+    // 模式道(REQ-041 P1 件2):serp=现行为零回归(缺省);follow=跟进访问结果页,内容两拍稳+导航预算
+    let mode = "<%= mode | default('serp') %>";
+    let errors = "";
+    fn adderr(errors, stage, op, message) {
+        let m = message.replace("\r", " ").replace("\n", " ").replace("\\", "\\\\").replace("\"", "\\\"");
+        let item = "{\"stage\":\"" + stage + "\",\"op\":\"" + op + "\",\"message\":\"" + m + "\"}";
+        if errors == "" { item } else { errors + "," + item }
+    }
+    fn fail1(errors, stage, op, message) {
+        "{\"probe\":null,\"pages\":[],\"errors\":[" + adderr(errors, stage, op, message) + "]}"
+    }
+    // 会话自愈:跨轮死会话残留致首 js 撞 "Session not found";探活失败即 newTab 重建路由
+    match cdp::js(r#"{{BODY:ping}}
+return ping(args);"#, #{}).await {
+        Ok(_) => (),
+        Err(_) => { let _t = cdp::dialect("newTab", "").await; }
+    }
+    // URL 构造(页面侧 encodeURIComponent,args 对象道注入安全);num 恒 10(num<10 实测缩自然结果)
+    let u = match cdp::js(r#"{{BODY:buildUrl}}
+return buildUrl(args);"#, #{"q" : q, "top" : top}).await {
+        Ok(v) => v,
+        Err(e) => {
+            time::sleep(time::Duration::from_millis(1000)).await;
+            match cdp::js(r#"{{BODY:buildUrl}}
+return buildUrl(args);"#, #{"q" : q, "top" : top}).await {
+                Ok(v2) => v2,
+                Err(e2) => { return Ok(fail1(errors, "build", "js", e2.message)); }
+            }
+        }
+    };
+    let nj = match cdp::js(r#"{{BODY:navParams}}
+return navParams(args);"#, #{"u" : u}).await {
+        Ok(v) => v,
+        Err(e) => { return Ok(fail1(errors, "build", "js", e.message)); }
+    };
+    // 裸导航不等 load 尾;瞬态错重试一次,再败原子错
+    match cdp::raw("Page.navigate", nj).await {
+        Ok(_) => (),
+        Err(e1) => {
+            time::sleep(time::Duration::from_millis(1500)).await;
+            match cdp::raw("Page.navigate", nj).await {
+                Ok(_) => (),
+                Err(e2) => { return Ok(fail1(errors, "goto", "raw", e2.message)); }
+            }
+        }
+    }
+    // 提交探测(有界轮,每跳新求值防导航中求值被断;js 错计为未提交继续轮)
+    let committed = 0;
+    while committed < 30 {
+        let onit = match cdp::js(r#"{{BODY:onSearch}}
+return onSearch(args);"#, #{}).await {
+            Ok(v) => v,
+            Err(_) => 0,
+        };
+        if onit == 1 {
+            break;
+        }
+        time::sleep(time::Duration::from_millis(300)).await;
+        committed = committed + 1;
+    }
+    // 挑战终态判读:/sorry = google 限流/反爬,原子错早退(不假绿,换出口 IP 走代理道)
+    let sorry = match cdp::js(r#"{{BODY:isSorry}}
+return isSorry(args);"#, #{}).await {
+        Ok(v) => v,
+        Err(_) => 0,
+    };
+    if sorry == 1 {
+        let surl = match cdp::js(r#"return location.href"#, #{}).await { Ok(v) => v, Err(_) => "" };
+        return Ok("{\"probe\": {\"slug\": \"google-search\", \"verdict\": \"challenged\", \"settled\": false, \"results\": [], \"url\": \"" + surl + "\"}, \"pages\": [], \"errors\": [" + adderr(errors, "serp", "sorry", "google /sorry 挑战页(IP 限流/反爬);换出口:引擎 --proxy 或候限流窗过") + "]}");
+    }
+    if committed >= 30 {
+        return Ok("{\"probe\": {\"slug\": \"google-search\", \"verdict\": \"nav-stall\", \"settled\": false, \"results\": [], \"url\": \"\", \"title\": \"\"}, \"pages\": [], \"errors\": [" + adderr(errors, "goto", "navigate", "SERP 未在提交探测窗内到位(不跳转/被拦/重定向)") + "]}");
+    }
+    // 段A-1:等收齐信号(settled attr 观察器即返,帽 settleAwait)
+    let plan0 = match cdp::js(r#"{{BODY:waitSettled}}
+return waitSettled(args);"#, #{"top" : top}).await {
+        Ok(v) => v,
+        Err(e) => {
+            // 导航竞态(Inspected target navigated or closed:sei 重定向杀求值)重试一道
+            time::sleep(time::Duration::from_millis(800)).await;
+            match cdp::js(r#"{{BODY:waitSettled}}
+return waitSettled(args);"#, #{"top" : top}).await {
+                Ok(v2) => v2,
+                Err(e2) => { return Ok(fail1(errors, "settle", "js", e2.message)); }
+            }
+        }
+    };
+    // 迟到 sorry 复查:重定向常发生在提交探测之后(null 时先判挑战页,不空耗 reload)
+    let sorry2 = match cdp::js(r#"{{BODY:isSorry}}
+return isSorry(args);"#, #{}).await {
+        Ok(v) => v,
+        Err(_) => 0,
+    };
+    if sorry2 == 1 {
+        let surl2 = match cdp::js(r#"return location.href"#, #{}).await { Ok(v) => v, Err(_) => "" };
+        return Ok("{\"probe\": {\"slug\": \"google-search\", \"verdict\": \"challenged\", \"settled\": false, \"results\": [], \"url\": \"" + surl2 + "\"}, \"pages\": [], \"errors\": [" + adderr(errors, "serp", "sorry", "google /sorry 挑战页(IP 限流/反爬,迟到形);换出口或候配额窗") + "]}");
+    }
+    // 自愈:probe 全无 = 注入 hiccup,刷页面重来一轮(reload 独立求值:导航销毁当前上下文)
+    let p_missing = match cdp::js(r#"{{BODY:probeMissing}}
+return probeMissing(args);"#, #{"plan" : plan0}).await {
+        Ok(v) => v,
+        Err(_) => 0,
+    };
+    let plan = plan0;
+    if p_missing == 1 {
+        let _rel = cdp::js(r#"{{BODY:reload}}
+return reload(args);"#, #{}).await;
+        time::sleep(time::Duration::from_millis(2500)).await;
+        plan = match cdp::js(r#"{{BODY:waitSettledReload}}
+return waitSettledReload(args);"#, #{}).await {
+            Ok(v) => { errors = adderr(errors, "selfheal", "reload", "probe 首轮未现,已刷页面重等"); v }
+            Err(e) => { return Ok(fail1(errors, "selfheal", "reload", e.message)); }
+        };
+    }
+    // 段A-2:consent 处置与终 plan
+    let plan = match cdp::js(r#"{{BODY:consentFinalize}}
+return consentFinalize(args);"#, #{"top" : top, "plan" : plan}).await {
+        Ok(v) => v,
+        Err(e) => { return Ok(fail1(errors, "settle", "js", e.message)); }
+    };
+    // 原子化错误:probe 全无(含刷新自愈轮)早退;probe 在而结果空(challenged/empty)是诚实终态
+    let has_probe = match cdp::js(r#"{{BODY:probeMissing}}
+return probeMissing(args);"#, #{"plan" : plan}).await {
+        Ok(v) => v,
+        Err(_) => 1,
+    };
+    if has_probe == 1 {
+        return Ok(fail1(errors, "settle", "probe", "settled attr 未现(probe 未跑:userscript 未装/未 --restart/非 google search 页)"));
+    }
+    // 段B:cdp 开标签并行访问。home(SERP 签)必须建签前捕获(newTab 切走路由,提取后捕获=最后访问签会被关)。
+    let home_id_pre = match cdp::dialect("currentTab", "").await {
+        Ok(h) => match cdp::js(r#"{{BODY:homeTargetId}}
+return homeTargetId(args);"#, #{"r" : h}).await {
+            Ok(s) => s,
+            Err(_) => "null",
+        },
+        Err(_) => "null",
+    };
+    let n = match cdp::js(r#"{{BODY:urlCount}}
+return urlCount(args);"#, #{"plan" : plan}).await {
+        Ok(v) => v,
+        Err(e) => { return Ok(fail1(errors, "tabs", "js", e.message)); }
+    };
+    // follow 预算闸(P1 件2):1 SERP+≤5 goto 跳是硬导航帽,超限 verdict=budget 原子回执
+    // (SERP 已收面保全进回执,不静默截断不假绿;serp 模式无此帽,现行为零回归)
+    if mode == "follow" {
+        let over = match cdp::js(r#"{{BODY:budgetOver}}
+return budgetOver(args);"#, #{"plan" : plan}).await {
+            Ok(v) => v,
+            Err(_) => 0,
+        };
+        if over == 1 {
+            let bp = match cdp::js(r#"{{BODY:budgetReceipt}}
+return budgetReceipt(args);"#, #{"plan" : plan}).await {
+                Ok(v) => v,
+                Err(_) => "{\"slug\":\"google-search\",\"verdict\":\"budget\",\"settled\":false,\"results\":[],\"url\":\"\",\"title\":\"\"}",
+            };
+            return Ok("{\"probe\":" + bp + ",\"pages\":[],\"errors\":[" + adderr(errors, "follow", "budget", "follow 导航预算熔断:结果页条数超 CAPS.followBudget 预算(1 SERP+≤5 goto 跳);top 收敛到预算内重跑") + "]}");
+        }
+    }
+    // 空签批量建 + 逐签点火导航(加载并行);点火失败留提取段落 nav:failed
+    let ids = Vec::new();
+    let k = 0;
+    while k < n {
+        let tid = match cdp::dialect("newTab", "").await {
+            Ok(t) => match cdp::js(r#"{{BODY:targetIdOf}}
+return targetIdOf(args);"#, #{"r" : t}).await {
+                Ok(s) => s,
+                Err(e) => { return Ok(fail1(errors, "tabs", "targetId", e.message)); }
+            },
+            Err(e) => { return Ok(fail1(errors, "tabs", "newTab", e.message)); }
+        };
+        ids.push(tid);
+        let navj = match cdp::js(r#"{{BODY:tabNavParams}}
+return tabNavParams(args);"#, #{"plan" : plan, "k" : k}).await {
+            Ok(v) => v,
+            Err(e) => { return Ok(fail1(errors, "tabs", "js", e.message)); }
+        };
+        let _navr = cdp::raw("Page.navigate", navj).await;
+        k = k + 1;
+    }
+    // 轮签取内容:switchTab(参数 rune 侧直拼,免疫死会话)→ 模式选提取体 → 渲染内容。
+    // serp=extractPage(complete 事件等待,现行为);follow=extractPageStable(内容两拍稳,P1 件2)。
+    // 提取体走同一条重试梯(bsrc 源 + fname 入口),差异全在体内,模板不分叉。
+    let bsrc = r#"{{BODY:extractPage}}"#;
+    let fname = "extractPage";
+    if mode == "follow" {
+        bsrc = r#"{{BODY:extractPageStable}}"#;
+        fname = "extractPageStable";
+    }
+    let pages = "";
+    let e2 = 0;
+    while e2 < n {
+        let sw_failed = 0;
+        let _swr = cdp::dialect("switchTab", "[" + ids[e2] + "]").await;
+        let content = match cdp::js(bsrc + "\nreturn " + fname + "(args);", #{"plan" : plan, "k" : e2}).await {
+            Ok(v) => v,
+            Err(er) => {
+                // 导航竞态(goto 包裹 302 链)重试一道
+                time::sleep(time::Duration::from_millis(800)).await;
+                match cdp::js(bsrc + "\nreturn " + fname + "(args);", #{"plan" : plan, "k" : e2}).await {
+                    Ok(v2) => v2,
+                    Err(er2) => "{\"url\":\"eval-failed\",\"nav\":\"eval-failed\",\"error\":\"" + er2.message.replace("\r", " ").replace("\n", " ").replace("\\", "\\\\").replace("\"", "\\\"") + "\"}"
+                }
+            }
+        };
+        if pages == "" { pages = content; } else { pages = pages + "," + content; }
+        e2 = e2 + 1;
+    }
+    // 回原签(建签前捕获)→ 统一关访问签 → 收口(probe 面重读新鲜 attr)
+    let _hr = cdp::dialect("switchTab", "[" + home_id_pre + "]").await;
+    let c2 = 0;
+    while c2 < n {
+        let _clr = cdp::dialect("closeTab", "[" + ids[c2] + "]").await;
+        c2 = c2 + 1;
+    }
+    let out = match cdp::js(r#"{{BODY:assemble}}
+return assemble(args);"#, #{"plan" : plan, "pages" : pages}).await {
+        Ok(v) => v,
+        // 收口求值失败:rune 侧拼最终面(plan/pages 都在手,已收数据不丢;形例外:plan 包裹层保留,README 注)
+        Err(e) => "{\"plan\":" + plan + ",\"pages\":[" + pages + "],\"errors\":[" + adderr(errors, "assembly", "js", e.message) + "]}"
+    };
+    Ok(out)
+}

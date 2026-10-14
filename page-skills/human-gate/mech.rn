@@ -1,0 +1,29 @@
+// human-gate 宿主编排:武装人工闸 → 零轮询等放行(页内 Promise 事件驱动,
+// 六向增强之①⑤演示:等待在页面事件循环里,rn 只挂一次 await)。
+// 用法:browse rune page-skills/human-gate/mech.rn [--timeout 300]
+pub async fn main() {
+    let armed = cdp::js(r#"(function(){
+  document.dispatchEvent(new CustomEvent('browse-human-arm', { detail: { message: '请在管理页菜单点「人工完成」' } }));
+  return document.documentElement.getAttribute('us-human-armed');
+})()"#, #{}).await?;
+    let done = cdp::js(r#"return (function(){
+  return new Promise(function(res){
+    var v = document.documentElement.getAttribute('us-human-done');
+    if (v) return res(v);
+    var to = setTimeout(function(){ res('gate-timeout'); }, 240000);
+    document.addEventListener('browse-human-done', function h(){
+      clearTimeout(to);
+      document.removeEventListener('browse-human-done', h);
+      res(document.documentElement.getAttribute('us-human-done') || 'event');
+    });
+    var mo = new MutationObserver(function(){
+      if (document.documentElement.getAttribute('us-human-done')) {
+        clearTimeout(to); mo.disconnect();
+        res(document.documentElement.getAttribute('us-human-done'));
+      }
+    });
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['us-human-done'] });
+  });
+})()"#, #{}).await?;
+    Ok(done)
+}

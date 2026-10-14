@@ -1,0 +1,14 @@
+// ==UserScript==
+// @name         link-table probe
+// @match        *://*/*
+// @connect      127.0.0.1
+// @grant        GM_xmlhttpRequest
+// @grant        unsafeWindow
+// @run-at       document-idle
+// ==/UserScript==
+/* @detect */
+function browseDetect(facts) {
+  return null; // 导出型无判定腿
+}
+/* @enddetect */
+

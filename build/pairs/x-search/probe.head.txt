@@ -1,0 +1,13 @@
+// ==UserScript==
+// @name         x-search probe
+// @match        https://x.com/*
+// @match        https://twitter.com/*
+// @grant        none
+// @run-at       document-idle
+// ==/UserScript==
+// 本文件是生成物(build/build.mts 产;源 build/pairs/x-search/probe.body.ts),勿手改。
+/* @detect */
+function browseDetect(facts) {
+  return null; // 显式 rune 道,不占用 goto 点名
+}
+/* @enddetect */
