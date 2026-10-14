@@ -15,7 +15,7 @@ function browseDetect(facts) {
 (function () {
   if (window.__xTimelineProbe) return;
   window.__xTimelineProbe = 1;
-  var REV = 'x-timeline/1';
+  var REV = 'x-timeline/2';
   var CAP = 80;
   function tabOf() {
     var tabs = document.querySelectorAll('[role=tab]');
@@ -44,12 +44,7 @@ function browseDetect(facts) {
       }
       if (!id || seen[id]) continue;
       seen[id] = 1;
-      var user = '';
-      var anchors = a.querySelectorAll('a[href]');
-      for (var k = 0; k < anchors.length; k++) {
-        var hh = (anchors[k].getAttribute('href') || '').split('?')[0];
-        if (/^\/[A-Za-z0-9_]{1,15}$/.test(hh)) { user = hh.slice(1); break; }
-      }
+      var user = href.split('/')[1] || '';
       var timeEl = a.querySelector('time');
       var time = timeEl ? (timeEl.getAttribute('datetime') || '') : '';
       var tt = a.querySelector('[data-testid=tweetText]');
