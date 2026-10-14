@@ -108,9 +108,8 @@ return 1;"#;
         Ok(_) => (),
         Err(_) => { let _t = cdp::dialect("newTab", "").await; }
     }
-    // 保活:最小化/失焦下 Chrome 会节流页面定时器与长轮询,焦点仿真与活跃生命周期态保住时间线刷新
-    let _ka1 = cdp::raw("Emulation.setFocusEmulationEnabled", "{\"enabled\":true}").await;
-    let _ka2 = cdp::raw("Page.setWebLifecycleState", "{\"state\":\"active\"}").await;
+    // 节流防治走引擎级旗标(disable-background-timer-throttling 等,见 README);
+    // 页内 Page.setWebLifecycleState/焦点仿真 raw 调用实测触发引擎崩溃(clean-chrome 段错误面),勿在此调用。
     let url = "https://x.com/home";
     let heals = 0;
     let opened = 0;
