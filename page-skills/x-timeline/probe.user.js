@@ -15,7 +15,7 @@ function browseDetect(facts) {
 (function () {
   if (window.__xTimelineProbe) return;
   window.__xTimelineProbe = 1;
-  var REV = 'x-timeline/5';
+  var REV = 'x-timeline/6';
   var CAP = 80;
   function tabOf() {
     var tabs = document.querySelectorAll('[role=tab]');
@@ -47,7 +47,7 @@ function browseDetect(facts) {
       var user = href.split('/')[1] || '';
       var links = [];
       var outLinks = a.querySelectorAll('a');
-      for (var q = 0; q < outLinks.length && links.length < 2; q++) {
+      for (var q = 0; q < outLinks.length && links.length < 5; q++) {
         var m = ((outLinks[q].innerText || '').match(/https?:\/\/[^\s]+/) || [])[0] || '';
         if (!m) continue;
         var oh = m.replace(/[.,;)]+$/, '').split('?')[0];
