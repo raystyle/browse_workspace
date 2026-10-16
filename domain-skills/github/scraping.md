@@ -51,3 +51,14 @@ return await goto("https://github.com/trending", {waitIdle: true})
 
 - 私有仓数据不在本配方范围（要认证与权限，走各自工具链）
 - API 结构化数据永远优先于页面解析；页面只是没有 API 时的兜底
+
+## 2026-10 版 DOM 实测锚点(仓库页与搜索页)
+
+新版 React 化后旧选择器大面积失效,以下锚点 2026-10-16 实测有效:
+
+- 星数:旧 `#repo-stars-counter-star` 失效;现为 `button[class*="StarButton"]` 按钮文本,形如 `Star20.6k (20.6k)`,解析 `[d.,]+[kK]?` 并按 k 换算
+- 语言:侧栏 `a[href*="/search?l="]` 水合晚,自旋等 ≤8 秒;文本形 `Rust99.2%`,去尾部百分比
+- topics:`a[href*="/topics/"]`(旧 `.topic-tag` 失效)
+- 仓库页等待:`goto` 勿配 waitIdle(长连接页 15s 超时),用 `wait: "domcontentloaded"` + JS 自旋 `article.markdown-body`(README 锚),侧栏可另自旋
+- 搜索结果:行容器 `[data-testid="results-list"] > div`,标题链接 `.search-title a[href]`;行文本按 `\n` 分行后形 `slug|desc|语言|·|星|·|更新`,按 `·` 分隔位解析(行前纯数字是星数非语言,无语言仓此位即星数)
+- 限速纪律:已登录浏览器面可自由抓,但页间 ≥8s 间隔防风控;API 未认证 60 次/时不变
