@@ -1,0 +1,101 @@
+// medium-articles 宿主编排:标签页文章列表抽取(goto 自愈 + 探针 settled 轮询 + 如实回执)。
+// 用法:browse rune page-skills/medium-articles/mech.rn --vars z=1 [--vars tag=cybersecurity] [--timeout 90]
+// 产出:articles [{href,title,author}],href 剥 source 尾参;verdict: ok | net | timeout
+// 探针体自注入,REV 与 probe.user.js 钉版同源。
+pub async fn main() {
+    let tag = "<%= tag | default("cybersecurity") %>";
+    fn esc(s) {
+        return s.replace("\r", " ").replace("\n", " ").replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+    fn jstr(v) {
+        if v == "" { return "null"; }
+        return "\"" + esc(v) + "\"";
+    }
+    fn receipt(verdict, msg, articles_json) {
+        return "{\"slug\":\"medium-articles\",\"verdict\":\"" + verdict + "\",\"tag\":" + jstr(tag) + ",\"articles\":" + articles_json + ",\"message\":\"" + esc(msg) + "\"}";
+    }
+    let probe_src = r#"(function () {
+  if (window.__MediumProbe) { return 1; }
+  window.__MediumProbe = 1;
+  var REV = 'medium-articles/1';
+  function collect() {
+    var out = [];
+    var arts = document.querySelectorAll('article');
+    for (var i = 0; i < arts.length; i++) {
+      var a = arts[i];
+      var links = a.querySelectorAll('a[href]');
+      var href = '';
+      var title = '';
+      var author = '';
+      for (var j = 0; j < links.length; j++) {
+        var h = (links[j].getAttribute('href') || '').split('?')[0];
+        if (h.indexOf('/@') > 0 && h.indexOf('/@') < 3) {
+          href = 'https://medium.com' + h;
+          var t = (links[j].textContent || '').trim();
+          if (t.length > 8 && !title) { title = t; }
+        }
+        if (h.startsWith('/@') && !author) { author = h.slice(1).split('/')[0]; }
+      }
+      if (href && title) {
+        out.push({ href: href, title: title.slice(0, 120), author: author });
+      }
+    }
+    return out;
+  }
+  function publish() {
+    try {
+      document.documentElement.setAttribute(
+        'mediumProbe',
+        JSON.stringify({ rev: REV, href: location.href, n: collect().length, articles: collect() })
+      );
+    } catch (e) {}
+    return 1;
+  }
+  var root = document.body || document.documentElement;
+  var mo = new MutationObserver(function () { publish(); });
+  mo.observe(root, { childList: true, subtree: true });
+  publish();
+  return 1;
+})();
+return 1;"#;
+    let url = "https://medium.com/tag/" + tag;
+    let heals = 0;
+    let opened = 0;
+    let net_msg = "";
+    while opened == 0 && heals < 3 {
+        match cdp::goto(url.clone()).await {
+            Ok(_) => { opened = 1; },
+            Err(e) => {
+                net_msg = e.message;
+                heals = heals + 1;
+                if heals < 3 {
+                    time::sleep(time::Duration::from_millis(800)).await;
+                }
+            }
+        }
+    }
+    if opened == 0 {
+        return Ok(receipt("net", net_msg, "[]"));
+    }
+    let _ = cdp::js(probe_src.clone(), #{}).await;
+    let i = 0;
+    while i < 30 {
+        let tick = match cdp::js(r#"function tick(args) {
+  try {
+    var p = JSON.parse(document.documentElement.getAttribute('mediumProbe') || 'null');
+    if (p && p.n > 0) { return 'OK' + JSON.stringify(p); }
+  } catch (e) {}
+  return 'WAIT';
+}"#, #{}).await {
+            Ok(v) => v,
+            Err(_) => "WAIT".to_string(),
+        };
+        if tick.startsWith("OK") {
+            let payload = tick.slice(2, tick.len());
+            return Ok(receipt("ok", "", payload));
+        }
+        time::sleep(time::Duration::from_millis(500)).await;
+        i = i + 1;
+    }
+    return Ok(receipt("timeout", "等待窗尽,无文章卡片", "[]"));
+}
