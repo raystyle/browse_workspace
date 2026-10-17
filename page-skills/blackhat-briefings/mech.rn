@@ -1,0 +1,89 @@
+// blackhat-briefings 宿主编排:年度简报列表抽取(标题/演讲者/赛道/格式)。
+// 用法:browse rune page-skills/blackhat-briefings/mech.rn --vars z=1 [--vars year=2025] [--vars region=usa] [--timeout 90]
+// 产出:briefings [{title,speakers[],tracks[],format}];verdict: ok | net | timeout
+// 页面结构(2026-10-17 实测):锚点 a[href^="#"] 承标题,块内 Speaker:/Tracks:/Format: 行。
+pub async fn main() {
+    let year = "<%= year | default("2025") %>";
+    let region = "<%= region | default("usa") %>";
+    fn esc(s) {
+        return s.replace("\r", " ").replace("\n", " ").replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    fn receipt(verdict, year, region, briefings_json, msg) {
+        return "{\"slug\":\"blackhat-briefings\",\"verdict\":\"" + verdict + "\",\"year\":\"" + year + "\",\"region\":\"" + region + "\",\"briefings\":" + briefings_json + ",\"message\":\"" + esc(msg) + "\"}";
+    }
+    let url = "https://blackhat.com/archive/" + region + "/" + year + "/briefings/schedule/";
+    let heals = 0;
+    let opened = 0;
+    let net_msg = "";
+    while opened == 0 && heals < 3 {
+        match cdp::goto(url.clone()).await {
+            Ok(_) => { opened = 1; },
+            Err(e) => {
+                net_msg = e.message;
+                heals = heals + 1;
+                if heals < 3 {
+                    time::sleep(time::Duration::from_millis(800)).await;
+                }
+            }
+        }
+    }
+    if opened == 0 {
+        return Ok(receipt("net", year, region, "[]", net_msg));
+    }
+    let i = 0;
+    let got = "";
+    while i < 36 {
+        if got == "" {
+            let tick = match cdp::js(r#"function tick(args) {
+  const sleep = () => new Promise(r => setTimeout(r, 0));
+  function collect() {
+    const out = [];
+    const HASH = String.fromCharCode(35);
+    const anchors = [...document.querySelectorAll('a')].filter(x => {
+      const h = x.getAttribute('href') || '';
+      return h.charAt(0) === HASH && (x.textContent || '').trim().length > 20
+        && !/^keynote:/i.test(x.textContent);
+    });
+    for (const a of anchors) {
+      let block = a;
+      for (let i = 0; i < 5; i++) {
+        if (block.parentElement && block.parentElement.innerText.length < 450) block = block.parentElement; else break;
+      }
+      const lines = (block.innerText || '').split('\n').map(x => x.trim()).filter(Boolean);
+      function splitPeople(line) {
+        return line.split(/,?\s*(?:Speaker|Contributor):\s*/).map(x => x.trim()).filter(Boolean);
+      }
+      const speakers = splitPeople(lines.find(x => x.startsWith('Speaker:')) || '');
+      const contributors = splitPeople(lines.find(x => x.startsWith('Contributor:')) || '');
+      const tracksLine = lines.find(x => x.startsWith('Tracks:')) || '';
+      const tracks = tracksLine.replace(/^Tracks:\s*/, '').split(',').map(x => x.trim()).filter(Boolean);
+      const formatLine = lines.find(x => x.startsWith('Format:')) || '';
+      out.push({
+        title: (a.textContent || '').trim().slice(0, 160),
+        speakers: speakers.concat(contributors).slice(0, 8),
+        tracks: tracks.slice(0, 5),
+        format: formatLine.replace(/^Format:\s*/, '').slice(0, 40)
+      });
+    }
+    return out;
+  }
+  const arts = collect();
+  if (arts.length > 0) { return 'OK' + JSON.stringify(arts); }
+  return 'WAIT';
+}return tick(args);"#, #{}).await {
+                Ok(v) => v,
+                Err(_) => "WAIT",
+            };
+            if tick.starts_with("OK") {
+                got = tick.replace("OK", "");
+            }
+        }
+        if got != "" {
+            return Ok(receipt("ok", year, region, got, ""));
+        }
+        time::sleep(time::Duration::from_millis(500)).await;
+        i = i + 1;
+    }
+    return Ok(receipt("timeout", year, region, "[]", "等待窗尽"));
+}
