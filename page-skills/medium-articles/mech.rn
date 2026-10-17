@@ -11,13 +11,13 @@ pub async fn main() {
         if v == "" { return "null"; }
         return "\"" + esc(v) + "\"";
     }
-    fn receipt(verdict, msg, articles_json) {
+    fn receipt(verdict, tag, msg, articles_json) {
         return "{\"slug\":\"medium-articles\",\"verdict\":\"" + verdict + "\",\"tag\":" + jstr(tag) + ",\"articles\":" + articles_json + ",\"message\":\"" + esc(msg) + "\"}";
     }
     let probe_src = r#"(function () {
   if (window.__MediumProbe) { return 1; }
   window.__MediumProbe = 1;
-  var REV = 'medium-articles/1';
+  var REV = 'medium-articles/2';
   function collect() {
     var out = [];
     var arts = document.querySelectorAll('article');
@@ -29,12 +29,22 @@ pub async fn main() {
       var author = '';
       for (var j = 0; j < links.length; j++) {
         var h = (links[j].getAttribute('href') || '').split('?')[0];
-        if (h.indexOf('/@') > 0 && h.indexOf('/@') < 3) {
-          href = 'https://medium.com' + h;
-          var t = (links[j].textContent || '').trim();
-          if (t.length > 8 && !title) { title = t; }
+        // 文章链接形 /@user/slug-hexid(三段);作者链接形 /@user(两段)
+        if (h.indexOf('/@') === 0) {
+          var parts = h.slice(2).split('/');
+          if (parts.length >= 2 && parts[1].length > 8) {
+            href = 'https://medium.com' + h;
+            var t = (links[j].textContent || '').trim();
+            if (t.length > 8 && !title) { title = t; }
+          } else if (!author) { author = parts[0]; }
         }
-        if (h.startsWith('/@') && !author) { author = h.slice(1).split('/')[0]; }
+      }
+      if (href && title && !author) {
+        // 标题链接常不带作者,回查卡片内其它 /@ 链接
+        for (var j2 = 0; j2 < links.length; j2++) {
+          var h2 = (links[j2].getAttribute('href') || '').split('?')[0];
+          if (h2.indexOf('/@') === 0 && h2.slice(2).split('/').length < 2) { author = h2.slice(2); break; }
+        }
       }
       if (href && title) {
         out.push({ href: href, title: title.slice(0, 120), author: author });
@@ -75,7 +85,7 @@ return 1;"#;
         }
     }
     if opened == 0 {
-        return Ok(receipt("net", net_msg, "[]"));
+        return Ok(receipt("net", tag, net_msg, "[]"));
     }
     let _ = cdp::js(probe_src.clone(), #{}).await;
     let i = 0;
@@ -88,14 +98,14 @@ return 1;"#;
   return 'WAIT';
 }"#, #{}).await {
             Ok(v) => v,
-            Err(_) => "WAIT".to_string(),
+            Err(_) => "WAIT",
         };
-        if tick.startsWith("OK") {
-            let payload = tick.slice(2, tick.len());
-            return Ok(receipt("ok", "", payload));
+        if tick.starts_with("OK") {
+            let payload = tick.replace("OK", "");
+            return Ok(receipt("ok", tag, "", payload));
         }
         time::sleep(time::Duration::from_millis(500)).await;
         i = i + 1;
     }
-    return Ok(receipt("timeout", "等待窗尽,无文章卡片", "[]"));
+    return Ok(receipt("timeout", tag, "等待窗尽,无文章卡片", "[]"));
 }

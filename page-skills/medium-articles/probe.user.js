@@ -8,7 +8,7 @@
 (function () {
   if (window.__MediumProbe) { return; }
   window.__MediumProbe = 1;
-  var REV = 'medium-articles/1';
+  var REV = 'medium-articles/2';
   function collect() {
     var out = [];
     var arts = document.querySelectorAll('article');
@@ -20,12 +20,22 @@
       var author = '';
       for (var j = 0; j < links.length; j++) {
         var h = (links[j].getAttribute('href') || '').split('?')[0];
-        if (h.indexOf('/@') > 0 && h.indexOf('/@') < 3) {
-          href = 'https://medium.com' + h;
-          var t = (links[j].textContent || '').trim();
-          if (t.length > 8 && !title) { title = t; }
+        // 文章链接形 /@user/slug-hexid(三段);作者链接形 /@user(两段)
+        if (h.indexOf('/@') === 0) {
+          var parts = h.slice(2).split('/');
+          if (parts.length >= 2 && parts[1].length > 8) {
+            href = 'https://medium.com' + h;
+            var t = (links[j].textContent || '').trim();
+            if (t.length > 8 && !title) { title = t; }
+          } else if (!author) { author = parts[0]; }
         }
-        if (h.startsWith('/@') && !author) { author = h.slice(1).split('/')[0]; }
+      }
+      if (href && title && !author) {
+        // 标题链接常不带作者,回查卡片内其它 /@ 链接
+        for (var j2 = 0; j2 < links.length; j2++) {
+          var h2 = (links[j2].getAttribute('href') || '').split('?')[0];
+          if (h2.indexOf('/@') === 0 && h2.slice(2).split('/').length < 2) { author = h2.slice(2); break; }
+        }
       }
       if (href && title) {
         out.push({ href: href, title: title.slice(0, 120), author: author });
