@@ -93,10 +93,10 @@ return 1;"#;
         let tick = match cdp::js(r#"function tick(args) {
   try {
     var p = JSON.parse(document.documentElement.getAttribute('mediumProbe') || 'null');
-    if (p && p.n > 0) { return 'OK' + JSON.stringify(p); }
+    if (p && p.n > 0) { return 'OK' + JSON.stringify(p.articles); }
   } catch (e) {}
   return 'WAIT';
-}"#, #{}).await {
+}return tick(args);"#, #{}).await {
             Ok(v) => v,
             Err(_) => "WAIT",
         };
