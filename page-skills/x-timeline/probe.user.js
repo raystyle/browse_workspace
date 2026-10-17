@@ -15,7 +15,7 @@ function browseDetect(facts) {
 (function () {
   if (window.__xTimelineProbe) return;
   window.__xTimelineProbe = 1;
-  var REV = 'x-timeline/6';
+  var REV = 'x-timeline/7';
   var CAP = 80;
   function tabOf() {
     var tabs = document.querySelectorAll('[role=tab]');

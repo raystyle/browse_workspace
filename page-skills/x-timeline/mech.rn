@@ -3,7 +3,8 @@
 // rounds 缺省 2 上限 4;steps 缺省 18 上限 40。探针体自注入(v0.31 无油猴安装面),REV 与 probe.user.js 钉版同源。
 // 网络错误(net:: / chrome-error / 页内「出错了」)最多再开两次,仍失败回 verdict=net,不伪装成空结果。
 pub async fn main() {
-    let rounds = <%= rounds | default(2) %>;
+    let rounds = <%= rounds | default(2) %>;  // tab: foryou(默认)|following(点切后采集订阅时间线)
+    let tab = "<%= tab | default("foryou") %>";
     if rounds < 1 { rounds = 1; }
     if rounds > 4 { rounds = 4; }
     let steps = <%= steps | default(18) %>;
@@ -23,7 +24,7 @@ pub async fn main() {
     let probe_src = r#"(function () {
   if (window.__xTimelineProbe) { return 1; }
   window.__xTimelineProbe = 1;
-  var REV = 'x-timeline/6';
+  var REV = 'x-timeline/7';
   var CAP = 80;
   function tabOf() {
     var tabs = document.querySelectorAll('[role=tab]');
@@ -130,6 +131,22 @@ return 1;"#;
     }
     if opened == 0 {
         return Ok(netfail(net_msg));
+    }
+    // 双源(2026-10-17 用户令):For you 与 Following 是两个算法面;following 时点切 tab
+    if tab == "following" {
+        let _switch = cdp::js(r#"(function () {
+  function clickTab(name) {
+    var tabs = document.querySelectorAll('[role=tab]');
+    for (var i = 0; i < tabs.length; i++) {
+      var t = (tabs[i].innerText || '').trim();
+      if (t === name) { tabs[i].click(); return 1; }
+    }
+    return 0;
+  }
+  var tries = 0;
+  while (tries < 20 && !clickTab('正在关注')) { tries++; }
+  return tries < 20 ? 1 : 0;
+})()"#, #{}).await;
     }
     let n = 0;
     let timeouts = 0;
