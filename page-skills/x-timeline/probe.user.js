@@ -15,7 +15,7 @@ function browseDetect(facts) {
 (function () {
   if (window.__xTimelineProbe) return;
   window.__xTimelineProbe = 1;
-  var REV = 'x-timeline/7';
+  var REV = 'x-timeline/8';
   var CAP = 80;
   function tabOf() {
     var tabs = document.querySelectorAll('[role=tab]');
@@ -45,14 +45,18 @@ function browseDetect(facts) {
       if (!id || seen[id]) continue;
       seen[id] = 1;
       var user = href.split('/')[1] || '';
+      // REV8:links 取 href 属性里的短链真值(t.co 等),不再从 innerText 猜展开域
+      // ——展开域常在正文,短链是法源唯一可解析的原件(Python 侧 url-resolve 带缓存)
       var links = [];
-      var outLinks = a.querySelectorAll('a');
+      var seenL = {};
+      var outLinks = a.querySelectorAll('a[href^="http"]');
       for (var q = 0; q < outLinks.length && links.length < 5; q++) {
-        var m = ((outLinks[q].innerText || '').match(/https?:\/\/[^\s]+/) || [])[0] || '';
-        if (!m) continue;
-        var oh = m.replace(/[.,;)]+$/, '').split('?')[0];
+        var raw = outLinks[q].getAttribute('href') || '';
+        var oh = raw.split('#')[0];
+        if (!oh || seenL[oh]) continue;
         if (oh.indexOf('https://x.com') === 0 || oh.indexOf('https://twitter.com') === 0) continue;
-        if (/^https:\/\/(t\.co|bit\.ly)\//.test(oh)) continue;
+        if (oh.indexOf(location.origin) === 0) continue;
+        seenL[oh] = 1;
         links.push(oh);
       }
       var timeEl = a.querySelector('time');
