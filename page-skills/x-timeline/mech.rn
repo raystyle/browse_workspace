@@ -341,7 +341,8 @@ return atOf(args);"#, #{}).await {
     if (!p || !p.id) continue;
     var isF = !first[p.id];
     if (isF) fresh += 1;
-    posts.push({ id: p.id, href: p.href, user: p.user, text: p.text, time: p.time, fresh: isF });
+    // REV8:links 短链原件随行(探针已收,pack 段此前丢弃)
+    posts.push({ id: p.id, href: p.href, user: p.user, text: p.text, time: p.time, fresh: isF, links: (p.links || []) });
   }
   posts.sort(function (a, b) { return (b.time || '').localeCompare(a.time || ''); });
   return JSON.stringify({
