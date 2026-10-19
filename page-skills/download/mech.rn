@@ -1,0 +1,96 @@
+// download mech:CDP 操作下载文件(引擎会话与指纹,墙友好;aria2 弃用)。
+// 用法:browse rune page-skills/download/mech.rn --vars url=<直链> --vars dest=<下载目录绝对路径> [--timeout 900]
+// 产出:{"slug":"download","verdict":"ok|denied|timeout|net","url":..,"path":..,"name":..,"message":..}
+// 流:Browset.setDownloadBehavior(allow+eventsEnabled)→ 页内 <a download> 点击触发
+//     → cdp::wait_event(downloadWillBegin) → 循环 wait_event(downloadProgress) 至 completed
+// 陷阱(workspace 记档):fetch+blob+anchor 的自造下载不 fire downloadProgress;
+//     本 mech 用真实 anchor 点击。内联导航型(页内 PDF 查看器)无 downloadWillBegin,
+//     PDF 直链若走查看器则退 verdict=inline,Python 侧改走 fetch 面。
+pub async fn main() {
+    let url = "<%= url | default("") %>";
+    let dest = "<%= dest | default("C:/Users/ray/.browse-rs/drops") %>";
+    let tmo = <%= timeout | default(900) %>;
+    fn esc(s) {
+        return s.replace("\r", " ").replace("\n", " ").replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+    fn receipt(verdict, url, dest, name, msg) {
+        return "{\"slug\":\"download\",\"verdict\":\"" + verdict + "\",\"url\":\"" + esc(url)
+            + "\",\"path\":\"" + esc(dest) + "/" + esc(name) + "\",\"name\":\"" + esc(name)
+            + "\",\"message\":\"" + esc(msg) + "\"}";
+    }
+    if url == "" {
+        return Ok(receipt("denied", url, dest, "", "url 变量缺失"));
+    }
+    let _ = cdp::raw("Browser.setDownloadBehavior",
+        "{\"behavior\":\"allow\",\"downloadPath\":\"" + dest + "\",\"eventsEnabled\":true}").await;
+    // 同源化:先 goto 目标 URL 的源根(任意同源页),页内锚点才是同源下载,
+    // 跨域 fetch 吃 CORS、跨域 anchor download 属性失效(实测)
+    let origin = match cdp::js(r#"function org(args) {
+  try { return new URL(args.u).origin; } catch (e) { return args.u; }
+}
+return org(args);"#, #{"u" : url}).await {
+        Ok(v) => v,
+        Err(_) => url,
+    };
+    let _nav = cdp::goto(origin).await;
+    time::sleep(time::Duration::from_millis(1200)).await;
+    // 先探体:同源页内 fetch 小探;挑战页标记单独判(用户令:撞挑战要告警停住)
+    let probe = match cdp::js(r#"function probe(args) {
+  return fetch(args.url, {credentials: "include"}).then(function (r) {
+    return r.text().then(function (t) {
+      var low = t.slice(0, 2000).toLowerCase();
+      var ch = low.indexOf("just a moment") >= 0 || low.indexOf("verify you are human") >= 0
+        || low.indexOf("cloudflare") >= 0 || low.indexOf("security verification") >= 0;
+      var isData = t.length > 64 && t.slice(0, 1) !== "<";
+      return JSON.stringify({s: r.status, n: t.length, challenge: ch ? 1 : 0});
+    });
+  }).catch(function (e) { return JSON.stringify({s: -1, n: 0, challenge: 0, e: String(e).slice(0, 60)}); });
+}
+return probe(args);"#, #{"url" : url}).await {
+        Ok(v) => v,
+        Err(e) => { return Ok(receipt("net", url, dest, "", e.message)); }
+    };
+    if probe.contains("\"challenge\":1") {
+        return Ok(receipt("challenge", url, dest, "", "探体撞挑战页:" + probe));
+    }
+    if probe.contains("\"n\":0}") || probe.contains("\"s\":-1") {
+        return Ok(receipt("denied", url, dest, "", "probe " + probe));
+    }
+    // 锚点触发下载(同源页内,真实下载事件;download 属性必须给真名,
+    // 空串实测被当无属性→PDF 走内联查看器)
+    let _click = match cdp::js(r#"function go(args) {
+  var HASH = String.fromCharCode(35);
+  var name = args.url.split("?")[0].split(HASH)[0].split("/").pop() || "file.bin";
+  var a = document.createElement("a");
+  a.href = args.url; a.download = name; a.rel = "noopener";
+  document.body.appendChild(a); a.click();
+  a.remove();
+  return "clicked:" + name;
+}
+return go(args);"#, #{"url" : url}).await {
+        Ok(v) => v,
+        Err(e) => { return Ok(receipt("net", url, dest, "", e.message)); }
+    };
+    // 等下载开始(名字解析下放 Python:Rune 字符串面只有 contains)
+    let began = cdp::wait_event("Browser.downloadWillBegin", 20).await;
+    let began_dbg = match began {
+        Ok(ev) => format!("{:?}", ev),
+        Err(_) => { return Ok(receipt("inline", url, dest, "", "无 downloadWillBegin(内联型,改走 fetch 面)")); }
+    };
+    let name = "";
+    // 循环等完成(Rune 无 mut,一切皆可变)
+    let waited = 0;
+    while waited < tmo {
+        let ev = cdp::wait_event("Browser.downloadProgress", 30).await;
+        match ev {
+            Ok(e) => {
+                let s = format!("{:?}", e);
+                if s.contains("completed") {
+                    return Ok(receipt("ok", url, dest, name, began_dbg));
+                }
+            }
+            Err(_) => { waited = waited + 30; }
+        }
+    }
+    return Ok(receipt("timeout", url, dest, name, began_dbg));
+}

@@ -63,13 +63,25 @@ pub async fn main() {
         title: (a.textContent || '').trim().slice(0, 160),
         speakers: speakers.concat(contributors).slice(0, 8),
         tracks: tracks.slice(0, 5),
-        format: formatLine.replace(/^Format:\s*/, '').slice(0, 40)
+        format: formatLine.replace(/^Format:\s*/, '').slice(0, 40),
+        materials: [...a.closest('div,section,li').querySelectorAll('a[href]')].map(function (x) {
+          return x.href;
+        }).filter(function (u) {
+          return /\.(pdf|ppt|pptx|zip)$/i.test(u) || u.indexOf('i.blackhat.com') >= 0;
+        }).slice(0, 6)
       });
     }
     return out;
   }
   const arts = collect();
   if (arts.length > 0) { return 'OK' + JSON.stringify(arts); }
+  const low = (document.body.innerText || '').slice(0, 3000).toLowerCase();
+  if (low.indexOf('something went wrong') >= 0
+    || low.indexOf('verify you are human') >= 0
+    || low.indexOf('just a moment') >= 0
+    || (document.title || '').indexOf('moment') >= 0) {
+    return 'CHALLENGE';
+  }
   return 'WAIT';
 }return tick(args);"#, #{}).await {
                 Ok(v) => v,
@@ -77,6 +89,11 @@ pub async fn main() {
             };
             if tick.starts_with("OK") {
                 got = tick.replace("OK", "");
+            }
+            if tick == "CHALLENGE" {
+                // 撞墙即停(用户令:挑战页要告警停住,不做锤子)
+                return Ok(receipt("challenge", year, region, "[]",
+                    "页面撞挑战/错误页(Something went wrong 或 CF 验证),需人工确认后重试"));
             }
         }
         if got != "" {
