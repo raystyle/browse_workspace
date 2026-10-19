@@ -13,6 +13,9 @@
 //   - 锚点跨域终链 download 属性失效(实测静默无事件)
 //   - suggestedFilename 给真名;Rune 字符串面只有 contains,名字解析
 //     下放 Python(message 携 begin 事件原文)
+//   - rn 面 cdp::wait_event 第二参是毫秒(方言面 session.waitFor 是秒,
+//     两兄弟单位不同);事件环有缓冲,sleep 期间落环的事件 wait 即取,
+//     曾用 15/30 冒充秒也能碰巧逮到 begin——单事件等待一律写足毫秒
 //   - 进度循环每轮事件成功也累计耗时:只数空等会让事件流不断的下载
 //     永不超时
 pub async fn main() {
@@ -68,12 +71,12 @@ return chk(args);"#, #{"u" : url}).await {
   return "clicked";
 }
 return go(args);"#, #{"url" : url}).await;
-    let began = cdp::wait_event("Browser.downloadWillBegin", 15).await;
+    let began = cdp::wait_event("Browser.downloadWillBegin", 15000).await;
     // 段二:直航兜底(治跨域附件:锚点属性失效,导航转下载)
     if began.is_err() {
         let _nav2 = cdp::goto(url).await;
         time::sleep(time::Duration::from_millis(800)).await;
-        began = cdp::wait_event("Browser.downloadWillBegin", 15).await;
+        began = cdp::wait_event("Browser.downloadWillBegin", 15000).await;
     }
     let (began_dbg, name) = match began {
         Ok(ev) => {
@@ -83,20 +86,20 @@ return go(args);"#, #{"url" : url}).await;
         }
         Err(_) => { return Ok(receipt("inline", url, dest, "", "无 downloadWillBegin(内联型,改走 fetch 面)")); }
     };
-    // 循环等完成:每轮事件成功也累计耗时(只数空等 = 事件流不断时
-    // 永不超时的死循环;归档服务器慢速常见,tmo 放宽)
+    // 循环等完成:毫秒记账(单轮 wait 30000ms),事件成功轮按 3s 折算
+    // (进度事件约 3s 一拍;只数空等 = 事件流不断时永不超时的死循环)
     let waited = 0;
-    while waited < tmo {
-        let ev = cdp::wait_event("Browser.downloadProgress", 30).await;
+    while waited < tmo * 1000 {
+        let ev = cdp::wait_event("Browser.downloadProgress", 30000).await;
         match ev {
             Ok(e) => {
                 let s = format!("{:?}", e);
                 if s.contains("completed") {
                     return Ok(receipt("ok", url, dest, name, began_dbg));
                 }
-                waited = waited + 1;
+                waited = waited + 3000;
             }
-            Err(_) => { waited = waited + 30; }
+            Err(_) => { waited = waited + 30000; }
         }
     }
     return Ok(receipt("timeout", url, dest, name, began_dbg));
