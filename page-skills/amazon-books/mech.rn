@@ -1,0 +1,127 @@
+// amazon-books 宿主编排:搜索页书目抽取(书名/作者/星级/评论数/ASIN)。
+// 用法:browse rune page-skills/amazon-books/mech.rn --vars kw=hacking+books [--timeout 60]
+// 产出:books [{asin,title,authors,stars,reviews}];verdict: ok | net | timeout | denied
+// 通道定式(2026-10-19 实测):/s?k= 直达吃 bot 墙(Sorry 页);
+// 先进首页再从 twotabsearchtextbox 表单提交即通过(拟人导航链)。
+// 页面结构:结果项 div[data-asin],标题 h2,作者行 .a-color-secondary 的
+// "by " 前缀文本,星级 .a-icon-alt,评论数 "N ratings"。
+pub async fn main() {
+    let kw = "<%= kw | default("hacking+books") %>";
+    fn esc(s) {
+        return s.replace("\r", " ").replace("\n", " ").replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+    fn receipt(verdict, kw, books_json, msg) {
+        return "{\"slug\":\"amazon-books\",\"verdict\":\"" + verdict + "\",\"kw\":\"" + kw + "\",\"books\":" + books_json + ",\"message\":\"" + esc(msg) + "\"}";
+    }
+    // 步 1:首页(会话落地)
+    let home = "https://www.amazon.com/";
+    let heals = 0;
+    let opened = 0;
+    let net_msg = "";
+    while opened == 0 && heals < 3 {
+        match cdp::goto(home).await {
+            Ok(_) => { opened = 1; },
+            Err(e) => {
+                net_msg = e.message;
+                heals = heals + 1;
+            }
+        }
+        if opened == 0 && heals < 3 {
+            time::sleep(time::Duration::from_millis(1200)).await;
+        }
+    }
+    if opened == 0 {
+        return Ok(receipt("net", kw, "[]", net_msg));
+    }
+    time::sleep(time::Duration::from_millis(1500)).await;
+    // 步 1.5:等搜索框就位(首页加载有波动)
+    let w = 0;
+    let box_ready = 0;
+    while w < 20 && box_ready == 0 {
+        let has = match cdp::js(r#"return !!document.getElementById("twotabsearchtextbox")"#, #{}).await {
+            Ok(v) => v,
+            Err(_) => false,
+        };
+        if has { box_ready = 1; }
+        if box_ready == 0 {
+            time::sleep(time::Duration::from_millis(500)).await;
+        }
+        w = w + 1;
+    }
+    if box_ready == 0 {
+        return Ok(receipt("denied", kw, "[]", "首页无搜索框(墙页或地区重定向)"));
+    }
+    // 步 2:搜索框提交(kw 的 + 还原为空格填框)
+    let kw_plain = kw.replace("+", " ");
+    let submit = match cdp::js(r#"function submitSearch(args) {
+  var box = document.getElementById("twotabsearchtextbox");
+  if (!box) return "no-box";
+  box.value = args.kw;
+  box.form.submit();
+  return "submitted";
+}
+return submitSearch(args);"#, #{"kw" : kw_plain}).await {
+        Ok(v) => v,
+        Err(_) => "js-err",
+    };
+    if submit != "submitted" {
+        return Ok(receipt("denied", kw, "[]", "搜索框不存在: " + submit));
+    }
+    // 步 3:等结果并抽取
+    let i = 0;
+    let got = "";
+    while i < 30 {
+        if got == "" {
+            let tick = match cdp::js(r#"function tick(args) {
+  function collect() {
+    const out = [];
+    document.querySelectorAll("div[data-asin]").forEach(function(el) {
+      const asin = el.getAttribute("data-asin") || "";
+      if (!asin) return;
+      const h2 = el.querySelector("h2");
+      const title = h2 ? (h2.textContent || "").replace(/\s+/g, " ").trim() : "";
+      if (title.length < 5) return;
+      let authors = "";
+      el.querySelectorAll(".a-color-secondary").forEach(function(r) {
+        const t = (r.textContent || "").replace(/\s+/g, " ").trim();
+        if (t.indexOf("by ") === 0 && !authors) authors = t.slice(3).slice(0, 200);
+      });
+      if (!authors) {
+        const m = (el.innerText || "").match(/by [A-Z][^\n[]*/);
+        if (m) authors = m[0].slice(3).replace(/\s+/g, " ").trim().slice(0, 200);
+      }
+      const alt = el.querySelector(".a-icon-alt");
+      const stars = alt ? parseFloat((alt.textContent || "0")) || 0 : 0;
+      const rm = (el.innerText || "").match(/([\d,]+) ratings/);
+      const reviews = rm ? parseInt(rm[1].replace(/,/g, ""), 10) : 0;
+      out.push({
+        asin: asin, title: title.slice(0, 200),
+        authors: authors, stars: stars, reviews: reviews
+      });
+    });
+    return out;
+  }
+  if ((document.title || "").indexOf("Sorry") >= 0
+    || (document.title || "").indexOf("Robot") >= 0) { return "DENIED"; }
+  const books = collect();
+  if (books.length > 0) { return "OK" + JSON.stringify(books); }
+  return "WAIT";
+}
+return tick(args);"#, #{}).await {
+                Ok(v) => v,
+                Err(_) => "WAIT",
+            };
+            if tick.starts_with("OK") {
+                got = tick.replace("OK", "");
+            } else if tick == "DENIED" {
+                return Ok(receipt("denied", kw, "[]", "bot 墙(Sorry/Robot 页)"));
+            }
+        }
+        if got != "" {
+            return Ok(receipt("ok", kw, got, ""));
+        }
+        time::sleep(time::Duration::from_millis(600)).await;
+        i = i + 1;
+    }
+    return Ok(receipt("timeout", kw, "[]", "等待窗尽"));
+}
