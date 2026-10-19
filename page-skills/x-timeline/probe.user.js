@@ -15,7 +15,7 @@ function browseDetect(facts) {
 (function () {
   if (window.__xTimelineProbe) return;
   window.__xTimelineProbe = 1;
-  var REV = 'x-timeline/8';
+  var REV = 'x-timeline/9';
   var CAP = 80;
   function tabOf() {
     var tabs = document.querySelectorAll('[role=tab]');
@@ -63,7 +63,8 @@ function browseDetect(facts) {
       var time = timeEl ? (timeEl.getAttribute('datetime') || '') : '';
       var tt = a.querySelector('[data-testid=tweetText]');
       var raw = tt ? (tt.textContent || '') : '';
-      var text = raw.replace(/\s+/g, ' ').trim().slice(0, 280);
+      // REV9:正文帽 1200(原 280 硬截断长推/分析长帖;Python 侧模型无长度约束)
+      var text = raw.replace(/\s+/g, ' ').trim().slice(0, 1200);
       posts.push({ id: id, href: 'https://x.com' + href, user: user, text: text, time: time, links: links });
     }
     return posts;
