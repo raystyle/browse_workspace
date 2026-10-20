@@ -33,8 +33,14 @@ pub async fn main() {
     if url == "" {
         return Ok(receipt("denied", url, dest, "", "url 变量缺失"));
     }
+    // dest 归一(2026-10-20 下载案实弹定谳):Windows 上 downloadPath 正斜杠
+    // 形态毒化该配置下全部下载(0 字节秒 cancel,零落盘),反斜杠全绿;
+    // 本机六格对照矩阵钉死(同二进制同 URL 同目录,单变量斜杠)。
+    // 归一后 --vars 传正斜杠/反斜杠都能跑;JSON 转义防 \U 断 params。
+    let dest = dest.replace("/", "\\");
+    let dest_esc = dest.replace("\\", "\\\\");
     let _ = cdp::raw("Browser.setDownloadBehavior",
-        "{\"behavior\":\"allow\",\"downloadPath\":\"" + dest + "\",\"eventsEnabled\":true}").await;
+        "{\"behavior\":\"allow\",\"downloadPath\":\"" + dest_esc + "\",\"eventsEnabled\":true}").await;
     // 源根导航(同源化:锚点在源根页内才有同源属性)
     let origin = match cdp::js(r#"function org(args) {
   try { return new URL(args.u).origin; } catch (e) { return args.u; }

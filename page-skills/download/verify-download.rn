@@ -1,0 +1,149 @@
+// download verify mech:闭案复验件(2026-10-20 下载案终局配套,四折反转弧收口)。
+// 用法:browse rune page-skills/download/verify-download.rn --vars url=<直链> --vars dest=<全新空目录绝对路径> [--vars timeout=300]
+// 产出:{"slug":"download-verify","verdict":"ok|canceled|inline|challenge|timeout|net|denied",
+//        "url":..,"dest":..,"began":<begin事件原文>,"last":<最后进度事件原文>,
+//        "ui":<chrome://downloads 项态JSON>,"waitedMs":..,"message":..}
+// 与 mech.rn 的差异(复验判别力,案卷教训实弹化):
+//   - completed 不直接收 ok:再读 chrome://downloads 项态(UI JSON 进回执),
+//     状态机闭环/字节核对由 Python 侧终判(案卷:落盘不闭环形事件面看不出来)
+//   - canceled 门提前:进度事件串含 canceled 即判,不拖到超时(案卷:饿死形
+//     终态翻 canceled,原 mech 会白等到 tmo)
+//   - last 携最后一条进度事件原文:receivedBytes 停滞/涓流判读下放 Python
+//   - waitedMs 记账进回执:字节/耗时→速率,涓流形(约 1KB/s)可机判
+// 口径(案卷纪律,跑前必读):
+//   - 新起实例+全新 profile 跑(干净矩阵;复用 profile 会引入下载历史变量)
+//   - 引擎出处先 browse status 核 engine 行:要对部署版托管 pin
+//     (参照 155.0.8059.39-gen9-r1;本机实测 sha256
+//     4ddbe3044bac63a409f75c768ff9d25238715acc0d4b6c323f7cc80c19bd59de)
+//   - cdp::wait_event 第二参是毫秒(方言面 session.waitFor 是秒,勿混)
+//   - 媒体站预检别用 curl/requests:media.defcon.org 有 TLS 指纹过滤,
+//     非浏览器客户端零字节假红(chrome 全通)
+// dest 形态(2026-10-20 实弹定谳,下载案根因):
+//   - Windows 上 Browser.setDownloadBehavior 的 downloadPath 用正斜杠
+//     (C:/Users/..)会毒化该配置下全部下载:0 字节秒 cancel、零落盘;
+//     反斜杠形态全绿。对照矩阵:托管面/反斜杠全绿,正斜杠全饿死(同二进制
+//     同 URL 同目录,单变量斜杠)。本脚本内置归一(dest 的 / 转 \),
+//     --vars 传正斜杠最省事;传反斜杠要过 bash --vars 四层转义,不推荐。
+//   - retry 缠结:同 URL 一旦有 canceled 项,后续同 URL 下载会被拽去
+//     retry 死项秒 cancel(实测 suggestedFilename/guid 复用旧项)。
+//     逃生:URL 加查询参数破缀(?r=1)或换全新 profile。
+pub async fn main() {
+    let url = "<%= url | default("") %>";
+    let dest = "<%= dest | default("") %>";
+    let tmo = <%= timeout | default(300) %>;
+    fn esc(s) {
+        return s.replace("\r", " ").replace("\n", " ").replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+    fn receipt(verdict, url, dest, began, last, ui, waited, msg) {
+        return "{\"slug\":\"download-verify\",\"verdict\":\"" + verdict + "\",\"url\":\"" + esc(url)
+            + "\",\"dest\":\"" + esc(dest) + "\",\"began\":\"" + esc(began)
+            + "\",\"last\":\"" + esc(last) + "\",\"ui\":" + ui
+            + ",\"waitedMs\":" + format!("{:?}", waited) + ",\"message\":\"" + esc(msg) + "\"}";
+    }
+    if url == "" {
+        return Ok(receipt("denied", url, dest, "", "", "\"\"", 0, "url 变量缺失"));
+    }
+    if dest == "" {
+        return Ok(receipt("denied", url, dest, "", "", "\"\"", 0, "dest 变量缺失(用全新空目录,便于字节核对)"));
+    }
+    // dest 归一(正斜杠→反斜杠)+ JSON 转义:Windows 上正斜杠 downloadPath
+    // 毒化下载(2026-10-20 实弹定谳),归一后调用方两种形态都能传
+    let dest = dest.replace("/", "\\");
+    let dest_esc = dest.replace("\\", "\\\\");
+    let _ = cdp::raw("Browser.setDownloadBehavior",
+        "{\"behavior\":\"allow\",\"downloadPath\":\"" + dest_esc + "\",\"eventsEnabled\":true}").await;
+    // 源根导航(同源化:锚点在源根页内才有同源属性)
+    let origin = match cdp::js(r#"function org(args) {
+  try { return new URL(args.u).origin; } catch (e) { return args.u; }
+}
+return org(args);"#, #{"u" : url}).await {
+        Ok(v) => v,
+        Err(_) => url,
+    };
+    let _nav = cdp::goto(origin).await;
+    time::sleep(time::Duration::from_millis(1000)).await;
+    // 挑战检测(用户令:撞挑战要告警停住)
+    let page_chk = match cdp::js(r#"function chk(args) {
+  var t = (document.title || "") + " " + (document.body ? document.body.innerText.slice(0, 800) : "");
+  var low = t.toLowerCase();
+  var ch = low.indexOf("just a moment") >= 0 || low.indexOf("verify you are human") >= 0
+    || low.indexOf("security verification") >= 0 || low.indexOf("cf-chl") >= 0;
+  return JSON.stringify({challenge: ch ? 1 : 0, title: document.title || ""});
+}
+return chk(args);"#, #{"u" : url}).await {
+        Ok(v) => v,
+        Err(e) => { return Ok(receipt("net", url, dest, "", "", "\"\"", 0, e.message)); }
+    };
+    if page_chk.contains("\"challenge\":1") {
+        return Ok(receipt("challenge", url, dest, "", "", "\"\"", 0, "源页撞挑战:" + page_chk));
+    }
+    // 段一:同源锚点(治内联型:PDF 查看器/文本直显强制转下载)
+    let _click = cdp::js(r#"function go(args) {
+  var HASH = String.fromCharCode(35);
+  var name = args.url.split("?")[0].split(HASH)[0].split("/").pop() || "file.bin";
+  var a = document.createElement("a");
+  a.href = args.url; a.download = name; a.rel = "noopener";
+  document.body.appendChild(a); a.click();
+  a.remove();
+  return "clicked";
+}
+return go(args);"#, #{"url" : url}).await;
+    let began = cdp::wait_event("Browser.downloadWillBegin", 15000).await;
+    // 段二:直航兜底(治跨域附件:锚点属性失效,导航转下载)
+    if began.is_err() {
+        let _nav2 = cdp::goto(url).await;
+        time::sleep(time::Duration::from_millis(800)).await;
+        began = cdp::wait_event("Browser.downloadWillBegin", 15000).await;
+    }
+    let began_dbg = match began {
+        Ok(ev) => format!("{:?}", ev),
+        Err(_) => { return Ok(receipt("inline", url, dest, "", "", "\"\"", 0, "无 downloadWillBegin(内联型或锚点失效,改走 fetch 面)")); }
+    };
+    // 进度环:毫秒记账(单轮 wait 30000ms,事件成功轮按 3s 折算——只数空等
+    // 会让事件流不断的下载永不超时);canceled 门提前收(案卷:饿死形终态)
+    let waited = 0;
+    let last_dbg = "";
+    while waited < tmo * 1000 {
+        let ev = cdp::wait_event("Browser.downloadProgress", 30000).await;
+        match ev {
+            Ok(e) => {
+                let s = format!("{:?}", e);
+                last_dbg = s;
+                if s.contains("completed") {
+                    // completed 后读 chrome://downloads 项态:状态机闭环/字节
+                    // 由 Python 终判(案卷:落盘不闭环形事件面看不出来)
+                    let _ = cdp::goto("chrome://downloads").await;
+                    time::sleep(time::Duration::from_millis(800)).await;
+                    let ui = match cdp::js(r#"function rd(args) {
+  var m = document.querySelector("downloads-manager");
+  if (!m || !m.shadowRoot) { return JSON.stringify({ui: "no-manager"}); }
+  var l = m.shadowRoot.getElementById("downloadsList");
+  if (!l) { return JSON.stringify({ui: "no-list"}); }
+  var it = l.querySelector("downloads-item");
+  if (!it || !it.data) { return JSON.stringify({ui: "no-item"}); }
+  var d = it.data;
+  return JSON.stringify({ui: "ok", state: d.state, dangerType: d.dangerType,
+    progress: d.progressStatusText || "", reason: d.lastReasonText || "",
+    fileName: d.fileName || "", received: d.bytesReceived, total: d.totalBytes,
+    url: d.url || ""});
+}
+return rd(args);"#, #{"u" : ""}).await {
+                        Ok(v) => v,
+                        Err(e2) => { return Ok(receipt("ok", url, dest, began_dbg, last_dbg,
+                            "\"ui_unread\"", waited, "事件 completed 但 UI 读取失败:" + e2.message)); }
+                    };
+                    return Ok(receipt("ok", url, dest, began_dbg, last_dbg, ui, waited,
+                        "事件 completed;UI 项态与盘上字节由 Python 终判(dest 目录核对)"));
+                }
+                if s.contains("canceled") {
+                    return Ok(receipt("canceled", url, dest, began_dbg, last_dbg, "\"\"", waited,
+                        "进度事件 canceled(饿死形终态,案卷口径:四件套采证)"));
+                }
+                waited = waited + 3000;
+            }
+            Err(_) => { waited = waited + 30000; }
+        }
+    }
+    return Ok(receipt("timeout", url, dest, began_dbg, last_dbg, "\"\"", waited,
+        "进度环超时(涓流/停滞形:last 事件原文判 receivedBytes 走势)"));
+}
