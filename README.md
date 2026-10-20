@@ -165,3 +165,10 @@ slug 属于 cta 白名单时，回执附加：
 ## 测试
 
 `pnpm check`、`pnpm facts`、`pnpm typecheck`。测试数据位于 `tests/fixtures/`。
+
+## 下载面判例(2026-10-20 六环定谳,clean-chrome 协办)
+
+- CDP 下载验收断言锚「chrome://downloads 项不现扣住态」(入口句形是有害观测量勿锚)
+- 下载落点:chrome 无 setDownloadBehavior 时落 `<state>/downloads/`(相对 chrome 启动 cwd 解析),非 ~/Downloads
+- 触发方式 anchor/导航无判别力;扩展名受扫与否无判别力(缺陷在 SB 状态机层)
+- 上游修复锚位:clean-chrome 155 树 chrome_features.cc(kTreatUnsafeDownloadsAsActive)+ chrome_download_manager_delegate.cc ASYNC_SCANNING case(REQ-024,候 G002 窗)
