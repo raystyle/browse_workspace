@@ -89,7 +89,7 @@ function browseDetect(facts) {
       posts: posts,
       at: Date.now()
     };
-    document.documentElement.setAttribute('probe', JSON.stringify(payload));
+    document.documentElement.setAttribute('probe-x-timeline', JSON.stringify(payload));
   }
   var timer = 0;
   function schedule() {

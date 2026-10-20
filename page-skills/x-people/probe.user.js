@@ -35,7 +35,7 @@ function browseDetect(facts) {
     var c = collect();
     var settled = !!(c.name || c.bio) || (location.pathname || '') === '/';
     var payload = { slug: 'x-people', rev: REV, settled: settled, href: location.href, c: c, at: Date.now() };
-    document.documentElement.setAttribute('probe', JSON.stringify(payload));
+    document.documentElement.setAttribute('probe-x-people', JSON.stringify(payload));
   }
   var timer = 0;
   function schedule() {
