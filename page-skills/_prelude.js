@@ -12,7 +12,14 @@
 window.__probe = window.__probe || (function () {
   var PORT = (function () {
     var p = '%%BROWSE_PORT%%';
-    return (p.indexOf('%%') === 0) ? '9880' : p;
+    // S016:未渲染(模板原样)≠ default 端口——多实例下会串线报错
+    // daemon。未注入则置空:上报腿见空静默跳过(首条 console.warn
+    // 一次),装槽时由 scripts/install-probe.ps1 渲染实际端口。
+    if (p.indexOf('%%') === 0) {
+      try { console.warn('[probe] BROWSE_PORT 未渲染,事件不上报(用 install-probe.ps1 按槽安装)'); } catch (e) { }
+      return '';
+    }
+    return p;
   })();
   var BASE = 'http://127.0.0.1:' + PORT;
   var R = {
@@ -67,6 +74,7 @@ window.__probe = window.__probe || (function () {
   };
 
   R._post = function (path, body) {
+    if (!PORT) return; // 未渲染不上报(S016:静默错投比不投更糟)
     if (typeof GM_xmlhttpRequest !== 'function') return; // 未装/无 grant 时静默
     GM_xmlhttpRequest({
       method: 'POST',
