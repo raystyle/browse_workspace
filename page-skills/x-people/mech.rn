@@ -37,7 +37,7 @@ pub async fn main() {
     var c = collect();
     var settled = !!(c.name || c.bio) || (location.pathname || '') === '/';
     var payload = { slug: 'x-people', rev: REV, settled: settled, href: location.href, c: c, at: Date.now() };
-    document.documentElement.setAttribute('probe-x-people', JSON.stringify(payload));
+    document.documentElement.setAttribute('probe:x-people', JSON.stringify(payload));
   }
   var timer = 0;
   function schedule() {
@@ -83,11 +83,19 @@ return 1;"#;
     return false;
   }
   if (isNet()) return 'NET';
+  function attrOf() {
+    var v = document.documentElement.getAttribute('probe:x-people');
+    if (!v) {
+      var old = document.documentElement.getAttribute('probe');
+      if (old) { try { var o = JSON.parse(old); if (o && o.slug === 'x-people') v = old; } catch (e) { } }
+    }
+    return v;
+  }
   try {
-    var p = JSON.parse(document.documentElement.getAttribute('probe-x-people') || 'null');
+    var p = JSON.parse(attrOf() || 'null');
     if (p && p.slug === 'x-people' && p.settled && p.c) {
       if (p.c.handle !== String(args.h || '')) return 'WAIT';
-      return 'READY' + (document.documentElement.getAttribute('probe-x-people') || 'null');
+      return 'READY' + (attrOf() || 'null');
     }
   } catch (e) { }
   return 'WAIT';

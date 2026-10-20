@@ -97,7 +97,7 @@ pub async fn main() {
       posts: posts,
       at: Date.now()
     };
-    document.documentElement.setAttribute('probe-x-timeline', JSON.stringify(payload));
+    document.documentElement.setAttribute('probe:x-timeline', JSON.stringify(payload));
   }
   var timer = 0;
   function schedule() {
@@ -184,10 +184,13 @@ return 1;"#;
   }
   function readProbe() {
     try {
-      return JSON.parse(document.documentElement.getAttribute('probe-x-timeline') || 'null');
-    } catch (e) {
-      return null;
-    }
+      var v = document.documentElement.getAttribute('probe:x-timeline');
+      if (!v) {
+        var old = document.documentElement.getAttribute('probe');
+        if (old) { var o = JSON.parse(old); if (o && o.slug === 'x-timeline') v = old; }
+      }
+      return v ? JSON.parse(v) : null;
+    } catch (e) { return null; }
   }
   if (isNet()) {
     var codeEl = document.querySelector('.error-code');
@@ -203,7 +206,7 @@ return 1;"#;
   var p = readProbe();
   if (!p || !p.settled || !p.posts || !p.posts.length) return 'WAIT';
   if (!p.at || Number(p.at) <= Number(args.since || 0)) return 'WAIT';
-  return 'READY' + (document.documentElement.getAttribute('probe-x-timeline') || 'null');
+  return 'READY' + (document.documentElement.getAttribute('probe:x-timeline') || 'null');
 }
 return tick(args);"#, #{"since" : since}).await {
                     Ok(v) => v,
@@ -264,7 +267,7 @@ return firstIds(args);"#, #{"snap" : got.clone()}).await {
   var acc = [];
   try { acc = JSON.parse(args.acc || '[]') || []; } catch (e) { acc = []; }
   var add = null;
-  try { add = JSON.parse(document.documentElement.getAttribute('probe-x-timeline') || 'null'); } catch (e) { add = null; }
+  try { add = JSON.parse(document.documentElement.getAttribute('probe:x-timeline') || 'null'); } catch (e) { add = null; }
   if (add && add.posts) {
     var seen = {};
     for (var i = 0; i < acc.length; i++) seen[acc[i].id] = 1;
@@ -294,7 +297,7 @@ return absorb(args);"#, #{"acc" : acc.clone()}).await {
             }
             since = match cdp::js(r#"function atOf(args) {
   try {
-    var p = JSON.parse(document.documentElement.getAttribute('probe-x-timeline') || 'null');
+    var p = JSON.parse(document.documentElement.getAttribute('probe:x-timeline') || 'null');
     return p && p.at ? Number(p.at) : 0;
   } catch (e) {
     return 0;
