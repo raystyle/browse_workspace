@@ -14,6 +14,10 @@ param(
 $ErrorActionPreference = "Stop"
 
 # 槽 → daemon 端口(与 browse 派生一致;default 9880,余者 9900+hash)
+# default 槽特例:BROWSE_NAME 必须保持未设(未命名实例=9880)。若设
+# BROWSE_NAME=default,browse 按派生口 9982 连 daemon,装与投分离
+# (装到 9982 实例,prelude 却上报 9880)——S017 修,web/gh 不受累
+# (真命名槽派生口与槽表恒一致)。
 $ports = @{ default = "9880"; web = "9921"; gh = "9934" }
 if (-not $ports.ContainsKey($Slot)) {
     Write-Host "未知槽:$Slot(可用:$($ports.Keys -join ' '))"
@@ -26,7 +30,11 @@ $rendered = $src -replace '%%BROWSE_PORT%%', $port
 $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("probe-render-" + [guid]::NewGuid().ToString("N").Substring(0,8) + ".user.js")
 Set-Content -Path $tmp -Value $rendered -Encoding UTF8
 
-$env:BROWSE_NAME = $Slot
+if ($Slot -eq "default") {
+    Remove-Item Env:BROWSE_NAME -ErrorAction SilentlyContinue
+} else {
+    $env:BROWSE_NAME = $Slot
+}
 & browse userscript install $tmp --restart 2>&1 | Write-Host
-Remove-Item $tmp.FullName -Force
+Remove-Item $tmp -Force
 Write-Host "[install-probe] $Slot 槽 $ProbePath 端口已渲染 $port"
